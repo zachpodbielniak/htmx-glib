@@ -1,0 +1,22 @@
+/*
+ * config.h - htmx-glib build configuration
+ *
+ * Copyright (C) 2026 Zach Podbielniak
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#ifndef HTMX_CONFIG_H
+#define HTMX_CONFIG_H
+
+#define HTMX_GLIB_VERSION_MAJOR @VERSION_MAJOR@
+#define HTMX_GLIB_VERSION_MINOR @VERSION_MINOR@
+#define HTMX_GLIB_VERSION_MICRO @VERSION_MICRO@
+#define HTMX_GLIB_VERSION_STRING "@VERSION@"
+
+#define HTMX_GLIB_VERSION_CHECK(major, minor, micro) \
+    ((HTMX_GLIB_VERSION_MAJOR > (major)) || \
+     (HTMX_GLIB_VERSION_MAJOR == (major) && HTMX_GLIB_VERSION_MINOR > (minor)) || \
+     (HTMX_GLIB_VERSION_MAJOR == (major) && HTMX_GLIB_VERSION_MINOR == (minor) && \
+      HTMX_GLIB_VERSION_MICRO >= (micro)))
+
+#endif /* HTMX_CONFIG_H */

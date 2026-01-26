@@ -1,0 +1,101 @@
+/*
+ * htmx-version.h - htmx-glib version information
+ *
+ * Copyright (C) 2026 Zach Podbielniak
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#ifndef HTMX_VERSION_H
+#define HTMX_VERSION_H
+
+#include <glib.h>
+
+G_BEGIN_DECLS
+
+/**
+ * HTMX_GLIB_MAJOR_VERSION:
+ *
+ * The major version number of the htmx-glib library.
+ */
+#define HTMX_GLIB_MAJOR_VERSION (@VERSION_MAJOR@)
+
+/**
+ * HTMX_GLIB_MINOR_VERSION:
+ *
+ * The minor version number of the htmx-glib library.
+ */
+#define HTMX_GLIB_MINOR_VERSION (@VERSION_MINOR@)
+
+/**
+ * HTMX_GLIB_MICRO_VERSION:
+ *
+ * The micro version number of the htmx-glib library.
+ */
+#define HTMX_GLIB_MICRO_VERSION (@VERSION_MICRO@)
+
+/**
+ * HTMX_GLIB_VERSION:
+ *
+ * The full version string of the htmx-glib library.
+ */
+#define HTMX_GLIB_VERSION "@VERSION@"
+
+/**
+ * HTMX_GLIB_CHECK_VERSION:
+ * @major: the major version to check for
+ * @minor: the minor version to check for
+ * @micro: the micro version to check for
+ *
+ * Checks whether the htmx-glib library is at least the specified version.
+ *
+ * Returns: %TRUE if the library version is at least @major.@minor.@micro
+ */
+#define HTMX_GLIB_CHECK_VERSION(major, minor, micro) \
+    ((HTMX_GLIB_MAJOR_VERSION > (major)) || \
+     (HTMX_GLIB_MAJOR_VERSION == (major) && HTMX_GLIB_MINOR_VERSION > (minor)) || \
+     (HTMX_GLIB_MAJOR_VERSION == (major) && HTMX_GLIB_MINOR_VERSION == (minor) && \
+      HTMX_GLIB_MICRO_VERSION >= (micro)))
+
+/**
+ * htmx_glib_get_major_version:
+ *
+ * Gets the major version of the htmx-glib library at runtime.
+ *
+ * Returns: the major version
+ */
+guint
+htmx_glib_get_major_version(void);
+
+/**
+ * htmx_glib_get_minor_version:
+ *
+ * Gets the minor version of the htmx-glib library at runtime.
+ *
+ * Returns: the minor version
+ */
+guint
+htmx_glib_get_minor_version(void);
+
+/**
+ * htmx_glib_get_micro_version:
+ *
+ * Gets the micro version of the htmx-glib library at runtime.
+ *
+ * Returns: the micro version
+ */
+guint
+htmx_glib_get_micro_version(void);
+
+/**
+ * htmx_glib_get_version_string:
+ *
+ * Gets the full version string of the htmx-glib library at runtime.
+ *
+ * Returns: (transfer none): the version string
+ */
+const gchar *
+htmx_glib_get_version_string(void);
+
+G_END_DECLS
+
+#endif /* HTMX_VERSION_H */

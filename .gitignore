@@ -1,0 +1,50 @@
+# Build directory
+build/
+
+# Object files
+*.o
+
+# Static libraries
+*.a
+
+# Shared libraries
+*.so
+*.so.*
+
+# pkg-config generated file
+htmx-glib-1.0.pc
+
+# Test binaries (executables without extension in tests/)
+tests/test-*
+!tests/test-*.c
+
+# Example binaries (executables without extension in examples/)
+examples/blog-layout
+examples/data-table
+examples/documentation
+examples/faq-accordion
+examples/file-upload
+examples/media-gallery
+examples/todo-app
+
+# Editor/IDE files
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+*.kate-swp
+
+# Core dumps (file only, not directories)
+/core
+vgcore.*
+
+# Dependency files
+*.d
+
+# Backup files
+*.bak
+*.orig
+
+# Claude Code
+.mcp.json
