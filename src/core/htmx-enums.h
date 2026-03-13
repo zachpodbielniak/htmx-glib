@@ -352,6 +352,34 @@ htmx_input_type_to_string(HtmxInputType type);
 HtmxInputType
 htmx_input_type_from_string(const gchar *str);
 
+/**
+ * HtmxCookieSameSite:
+ * @HTMX_COOKIE_SAME_SITE_STRICT: Only send cookie for same-site requests
+ * @HTMX_COOKIE_SAME_SITE_LAX: Send for same-site and top-level navigations
+ * @HTMX_COOKIE_SAME_SITE_NONE: Send for all requests (requires Secure)
+ *
+ * SameSite attribute values for HTTP cookies.
+ */
+typedef enum {
+	HTMX_COOKIE_SAME_SITE_STRICT = 0,
+	HTMX_COOKIE_SAME_SITE_LAX,
+	HTMX_COOKIE_SAME_SITE_NONE
+} HtmxCookieSameSite;
+
+GType htmx_cookie_same_site_get_type(void) G_GNUC_CONST;
+#define HTMX_TYPE_COOKIE_SAME_SITE (htmx_cookie_same_site_get_type())
+
+/**
+ * htmx_cookie_same_site_to_string:
+ * @same_site: an #HtmxCookieSameSite
+ *
+ * Converts a SameSite enum to its string representation.
+ *
+ * Returns: (transfer none): the SameSite string (e.g., "Strict", "Lax")
+ */
+const gchar *
+htmx_cookie_same_site_to_string(HtmxCookieSameSite same_site);
+
 G_END_DECLS
 
 #endif /* HTMX_ENUMS_H */

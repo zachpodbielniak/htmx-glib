@@ -38,6 +38,17 @@ G_BEGIN_DECLS
 #include "core/htmx-config.h"
 #include "core/htmx-request.h"
 #include "core/htmx-response.h"
+#include "core/htmx-context.h"
+#include "core/htmx-middleware.h"
+#include "core/htmx-cookie.h"
+#include "core/htmx-session.h"
+#include "core/htmx-csrf.h"
+#include "core/htmx-validator.h"
+#include "core/htmx-cache.h"
+#include "core/htmx-memory-cache.h"
+#include "core/htmx-rate-limiter.h"
+#include "core/htmx-i18n.h"
+#include "core/htmx-template-engine.h"
 #include "core/htmx-handler.h"
 #include "core/htmx-router.h"
 #include "core/htmx-server.h"
@@ -102,6 +113,7 @@ G_BEGIN_DECLS
 
 /* Extensions */
 #include "extensions/htmx-extension.h"
+#include "extensions/htmx-extension-registry.h"
 #include "extensions/htmx-sse.h"
 #include "extensions/htmx-websocket.h"
 

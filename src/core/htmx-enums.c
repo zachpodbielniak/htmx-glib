@@ -422,6 +422,50 @@ htmx_input_type_from_string(const gchar *str)
 }
 
 /*
+ * GType registration for HtmxCookieSameSite
+ */
+GType
+htmx_cookie_same_site_get_type(void)
+{
+	static gsize g_type_id = 0;
+
+	if (g_once_init_enter(&g_type_id)) {
+		static const GEnumValue values[] = {
+			{ HTMX_COOKIE_SAME_SITE_STRICT, "HTMX_COOKIE_SAME_SITE_STRICT", "Strict" },
+			{ HTMX_COOKIE_SAME_SITE_LAX, "HTMX_COOKIE_SAME_SITE_LAX", "Lax" },
+			{ HTMX_COOKIE_SAME_SITE_NONE, "HTMX_COOKIE_SAME_SITE_NONE", "None" },
+			{ 0, NULL, NULL }
+		};
+		GType type_id = g_enum_register_static("HtmxCookieSameSite", values);
+		g_once_init_leave(&g_type_id, type_id);
+	}
+
+	return (GType)g_type_id;
+}
+
+/*
+ * SameSite enum strings
+ */
+static const gchar *same_site_strings[] = {
+	"Strict",
+	"Lax",
+	"None",
+	NULL
+};
+
+/*
+ * Convert HtmxCookieSameSite to string
+ */
+const gchar *
+htmx_cookie_same_site_to_string(HtmxCookieSameSite same_site)
+{
+	g_return_val_if_fail(same_site >= HTMX_COOKIE_SAME_SITE_STRICT &&
+	                     same_site <= HTMX_COOKIE_SAME_SITE_NONE, "Lax");
+
+	return same_site_strings[same_site];
+}
+
+/*
  * Convert HtmxButtonType to string
  */
 const gchar *

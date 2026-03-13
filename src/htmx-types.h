@@ -17,14 +17,23 @@ G_BEGIN_DECLS
  */
 
 typedef struct _HtmxConfig              HtmxConfig;
+typedef struct _HtmxContext             HtmxContext;
 typedef struct _HtmxRequest             HtmxRequest;
 typedef struct _HtmxResponse            HtmxResponse;
 typedef struct _HtmxRouter              HtmxRouter;
 typedef struct _HtmxServer              HtmxServer;
+typedef struct _HtmxMiddleware          HtmxMiddleware;
+typedef struct _HtmxSession             HtmxSession;
+typedef struct _HtmxCsrf                HtmxCsrf;
 typedef struct _HtmxFragment            HtmxFragment;
 typedef struct _HtmxForm                HtmxForm;
 typedef struct _HtmxInput               HtmxInput;
 typedef struct _HtmxTemplate            HtmxTemplate;
+typedef struct _HtmxMemoryCache         HtmxMemoryCache;
+typedef struct _HtmxRateLimiter         HtmxRateLimiter;
+typedef struct _HtmxI18n                HtmxI18n;
+typedef struct _HtmxTemplateEngine      HtmxTemplateEngine;
+typedef struct _HtmxExtensionRegistry   HtmxExtensionRegistry;
 typedef struct _HtmxSseConnection       HtmxSseConnection;
 typedef struct _HtmxWebSocketConnection HtmxWebSocketConnection;
 
@@ -35,11 +44,15 @@ typedef struct _HtmxWebSocketConnection HtmxWebSocketConnection;
 typedef struct _HtmxNode                HtmxNode;
 typedef struct _HtmxNodeClass           HtmxNodeClass;
 
+typedef struct _HtmxValidator           HtmxValidator;
+typedef struct _HtmxValidatorClass      HtmxValidatorClass;
+
 /*
  * GBoxed types
  */
 
 typedef struct _HtmxAttribute           HtmxAttribute;
+typedef struct _HtmxCookie              HtmxCookie;
 typedef struct _HtmxTrigger             HtmxTrigger;
 typedef struct _HtmxSwap                HtmxSwap;
 typedef struct _HtmxRequestHeaders      HtmxRequestHeaders;
@@ -55,12 +68,41 @@ typedef struct _HtmxElementInterface    HtmxElementInterface;
 typedef struct _HtmxHandler             HtmxHandler;
 typedef struct _HtmxHandlerInterface    HtmxHandlerInterface;
 
+typedef struct _HtmxCache               HtmxCache;
+typedef struct _HtmxCacheInterface      HtmxCacheInterface;
+
 typedef struct _HtmxExtension           HtmxExtension;
 typedef struct _HtmxExtensionInterface  HtmxExtensionInterface;
 
 /*
  * Callback types
  */
+
+/**
+ * HtmxMiddlewareNext:
+ * @context: the request context
+ * @data: (closure): opaque continuation data
+ *
+ * Continuation function passed to middleware. Call this to invoke
+ * the next middleware in the chain.
+ */
+typedef void (*HtmxMiddlewareNext)(HtmxContext *context,
+                                   gpointer     data);
+
+/**
+ * HtmxMiddlewareFunc:
+ * @context: the request context
+ * @next: continuation to invoke the next middleware
+ * @next_data: (closure next): opaque data for @next
+ * @user_data: (closure): user data from registration
+ *
+ * A middleware function. Must call @next(@context, @next_data) to
+ * continue the pipeline, or set a response on @context to short-circuit.
+ */
+typedef void (*HtmxMiddlewareFunc)(HtmxContext        *context,
+                                   HtmxMiddlewareNext  next,
+                                   gpointer            next_data,
+                                   gpointer            user_data);
 
 /**
  * HtmxRouteCallback:

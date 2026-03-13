@@ -12,6 +12,7 @@
 #include <libsoup/soup.h>
 #include "htmx-router.h"
 #include "htmx-config.h"
+#include "htmx-middleware.h"
 
 G_BEGIN_DECLS
 
@@ -71,6 +72,36 @@ htmx_server_get_router(HtmxServer *self);
  */
 SoupServer *
 htmx_server_get_soup_server(HtmxServer *self);
+
+/**
+ * htmx_server_get_middleware:
+ * @self: an #HtmxServer
+ *
+ * Gets the middleware pipeline for direct manipulation.
+ *
+ * Returns: (transfer none): the #HtmxMiddleware pipeline
+ */
+HtmxMiddleware *
+htmx_server_get_middleware(HtmxServer *self);
+
+/**
+ * htmx_server_use:
+ * @self: an #HtmxServer
+ * @func: the middleware function
+ * @user_data: (nullable): user data for @func
+ * @destroy: (nullable): destroy function for @user_data
+ *
+ * Adds a middleware function to the server's pipeline.
+ * Middleware runs in the order added, wrapping the route handler
+ * in an "onion" pattern.
+ */
+void
+htmx_server_use(
+	HtmxServer         *self,
+	HtmxMiddlewareFunc  func,
+	gpointer            user_data,
+	GDestroyNotify      destroy
+);
 
 /**
  * htmx_server_start:

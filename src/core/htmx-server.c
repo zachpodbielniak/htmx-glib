@@ -10,17 +10,49 @@
 struct _HtmxServer {
 	GObject parent_instance;
 
-	SoupServer *soup_server;
-	HtmxRouter *router;
-	HtmxConfig *config;
-	GMainLoop  *main_loop;
-	gboolean    is_running;
+	SoupServer     *soup_server;
+	HtmxRouter     *router;
+	HtmxConfig     *config;
+	HtmxMiddleware *middleware;
+	GMainLoop      *main_loop;
+	gboolean        is_running;
 };
 
 G_DEFINE_FINAL_TYPE(HtmxServer, htmx_server, G_TYPE_OBJECT)
 
 /*
- * Handle incoming requests
+ * Terminal middleware: dispatches the request through the router.
+ * This is called as the final step in the middleware chain.
+ */
+static void
+router_dispatch(
+	HtmxContext        *context,
+	HtmxMiddlewareNext  next,
+	gpointer            next_data,
+	gpointer            user_data
+){
+	HtmxRouter *router = HTMX_ROUTER(user_data);
+	HtmxRequest *request;
+	HtmxResponse *response;
+	GHashTable *params = NULL;
+
+	(void)next;
+	(void)next_data;
+
+	request = htmx_context_get_request(context);
+	response = htmx_router_match(router, request, &params);
+
+	if (params != NULL) {
+		htmx_context_set_params(context, params);
+	}
+
+	if (response != NULL) {
+		htmx_context_set_response(context, response);
+	}
+}
+
+/*
+ * Handle incoming requests through the middleware pipeline.
  */
 static void
 handle_request(
@@ -32,20 +64,26 @@ handle_request(
 ){
 	HtmxServer *self = HTMX_SERVER(user_data);
 	g_autoptr(HtmxRequest) request = NULL;
-	g_autoptr(HtmxResponse) response = NULL;
-	GHashTable *params = NULL;
+	g_autoptr(HtmxContext) context = NULL;
+	HtmxResponse *response;
+
+	(void)server;
+	(void)path;
+	(void)query;
 
 	request = htmx_request_new_from_message(msg);
-	response = htmx_router_match(self->router, request, &params);
+	context = htmx_context_new(request);
 
+	/* Run middleware pipeline with router dispatch as terminal handler */
+	htmx_middleware_run(self->middleware, context,
+	                    router_dispatch, self->router);
+
+	response = htmx_context_get_response(context);
 	if (response == NULL) {
-		response = htmx_response_not_found();
-	}
-
-	htmx_response_apply(response, msg);
-
-	if (params != NULL) {
-		g_hash_table_unref(params);
+		g_autoptr(HtmxResponse) not_found = htmx_response_not_found();
+		htmx_response_apply(not_found, msg);
+	} else {
+		htmx_response_apply(response, msg);
 	}
 }
 
@@ -57,6 +95,7 @@ htmx_server_finalize(GObject *object)
 	g_clear_object(&self->soup_server);
 	g_clear_object(&self->router);
 	g_clear_object(&self->config);
+	g_clear_object(&self->middleware);
 	g_clear_pointer(&self->main_loop, g_main_loop_unref);
 
 	G_OBJECT_CLASS(htmx_server_parent_class)->finalize(object);
@@ -76,6 +115,7 @@ htmx_server_init(HtmxServer *self)
 	self->soup_server = NULL;
 	self->router = htmx_router_new();
 	self->config = htmx_config_new();
+	self->middleware = htmx_middleware_new();
 	self->main_loop = NULL;
 	self->is_running = FALSE;
 }
@@ -132,6 +172,27 @@ htmx_server_get_soup_server(HtmxServer *self)
 	g_return_val_if_fail(HTMX_IS_SERVER(self), NULL);
 
 	return self->soup_server;
+}
+
+HtmxMiddleware *
+htmx_server_get_middleware(HtmxServer *self)
+{
+	g_return_val_if_fail(HTMX_IS_SERVER(self), NULL);
+
+	return self->middleware;
+}
+
+void
+htmx_server_use(
+	HtmxServer         *self,
+	HtmxMiddlewareFunc  func,
+	gpointer            user_data,
+	GDestroyNotify      destroy
+){
+	g_return_if_fail(HTMX_IS_SERVER(self));
+	g_return_if_fail(func != NULL);
+
+	htmx_middleware_use(self->middleware, func, user_data, destroy);
 }
 
 gboolean

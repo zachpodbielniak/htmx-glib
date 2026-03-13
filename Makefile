@@ -15,6 +15,17 @@ CORE_SOURCES = \
 	$(COREDIR)/htmx-config.c \
 	$(COREDIR)/htmx-request.c \
 	$(COREDIR)/htmx-response.c \
+	$(COREDIR)/htmx-context.c \
+	$(COREDIR)/htmx-middleware.c \
+	$(COREDIR)/htmx-cookie.c \
+	$(COREDIR)/htmx-session.c \
+	$(COREDIR)/htmx-csrf.c \
+	$(COREDIR)/htmx-validator.c \
+	$(COREDIR)/htmx-cache.c \
+	$(COREDIR)/htmx-memory-cache.c \
+	$(COREDIR)/htmx-rate-limiter.c \
+	$(COREDIR)/htmx-i18n.c \
+	$(COREDIR)/htmx-template-engine.c \
 	$(COREDIR)/htmx-handler.c \
 	$(COREDIR)/htmx-router.c \
 	$(COREDIR)/htmx-server.c
@@ -57,6 +68,7 @@ ELEMENT_SOURCES = \
 
 EXTENSION_SOURCES = \
 	$(EXTENSIONDIR)/htmx-extension.c \
+	$(EXTENSIONDIR)/htmx-extension-registry.c \
 	$(EXTENSIONDIR)/htmx-sse.c \
 	$(EXTENSIONDIR)/htmx-websocket.c
 
@@ -69,6 +81,17 @@ CORE_HEADERS = \
 	$(COREDIR)/htmx-config.h \
 	$(COREDIR)/htmx-request.h \
 	$(COREDIR)/htmx-response.h \
+	$(COREDIR)/htmx-context.h \
+	$(COREDIR)/htmx-middleware.h \
+	$(COREDIR)/htmx-cookie.h \
+	$(COREDIR)/htmx-session.h \
+	$(COREDIR)/htmx-csrf.h \
+	$(COREDIR)/htmx-validator.h \
+	$(COREDIR)/htmx-cache.h \
+	$(COREDIR)/htmx-memory-cache.h \
+	$(COREDIR)/htmx-rate-limiter.h \
+	$(COREDIR)/htmx-i18n.h \
+	$(COREDIR)/htmx-template-engine.h \
 	$(COREDIR)/htmx-handler.h \
 	$(COREDIR)/htmx-router.h \
 	$(COREDIR)/htmx-server.h
@@ -111,6 +134,7 @@ ELEMENT_HEADERS = \
 
 EXTENSION_HEADERS = \
 	$(EXTENSIONDIR)/htmx-extension.h \
+	$(EXTENSIONDIR)/htmx-extension-registry.h \
 	$(EXTENSIONDIR)/htmx-sse.h \
 	$(EXTENSIONDIR)/htmx-websocket.h
 
