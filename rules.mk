@@ -1,49 +1,22 @@
-# htmx-glib common build rules
+# rules.mk - Common build rules for htmx-glib
 # Copyright (C) 2026 Zach Podbielniak
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Pattern rule for compiling C source files
-$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+# Generic pattern rule — mkdir -p handles all subdirectory creation
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
+	@mkdir -p $(dir $@)
 	$(ECHO) "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-$(OBJDIR)/core/%.o: $(COREDIR)/%.c | $(OBJDIR)/core
-	$(ECHO) "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+# Create output directory
+$(OUTDIR):
+	mkdir -p $(OUTDIR)
 
-$(OBJDIR)/model/%.o: $(MODELDIR)/%.c | $(OBJDIR)/model
-	$(ECHO) "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/element/%.o: $(ELEMENTDIR)/%.c | $(OBJDIR)/element
-	$(ECHO) "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/extensions/%.o: $(EXTENSIONDIR)/%.c | $(OBJDIR)/extensions
-	$(ECHO) "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-
-# Create object directories
 $(OBJDIR):
-	$(Q)mkdir -p $@
-
-$(OBJDIR)/core:
-	$(Q)mkdir -p $@
-
-$(OBJDIR)/model:
-	$(Q)mkdir -p $@
-
-$(OBJDIR)/element:
-	$(Q)mkdir -p $@
-
-$(OBJDIR)/extensions:
-	$(Q)mkdir -p $@
-
-$(BUILDDIR):
-	$(Q)mkdir -p $@
+	mkdir -p $(OBJDIR)
 
 # Generate config.h from template
-$(BUILDDIR)/config.h: $(SRCDIR)/config.h.in | $(BUILDDIR)
+$(OUTDIR)/config.h: $(SRCDIR)/config.h.in | $(OUTDIR)
 	$(ECHO) "  GEN     $@"
 	$(Q)sed \
 		-e 's/@VERSION_MAJOR@/$(VERSION_MAJOR)/g' \
@@ -53,7 +26,7 @@ $(BUILDDIR)/config.h: $(SRCDIR)/config.h.in | $(BUILDDIR)
 		$< > $@
 
 # Generate htmx-version.h from template
-$(BUILDDIR)/htmx-version.h: $(SRCDIR)/htmx-version.h.in | $(BUILDDIR)
+$(OUTDIR)/htmx-version.h: $(SRCDIR)/htmx-version.h.in | $(OUTDIR)
 	$(ECHO) "  GEN     $@"
 	$(Q)sed \
 		-e 's/@VERSION_MAJOR@/$(VERSION_MAJOR)/g' \
@@ -63,7 +36,7 @@ $(BUILDDIR)/htmx-version.h: $(SRCDIR)/htmx-version.h.in | $(BUILDDIR)
 		$< > $@
 
 # Generate pkg-config file
-$(BUILDDIR)/$(PROJECT_NAME)-$(API_VERSION).pc: $(PROJECT_NAME)-$(API_VERSION).pc.in | $(BUILDDIR)
+$(OUTDIR)/$(PROJECT_NAME)-$(API_VERSION).pc: $(PROJECT_NAME)-$(API_VERSION).pc.in | $(OUTDIR)
 	$(ECHO) "  GEN     $@"
 	$(Q)sed \
 		-e 's|@PREFIX@|$(PREFIX)|g' \
@@ -74,17 +47,50 @@ $(BUILDDIR)/$(PROJECT_NAME)-$(API_VERSION).pc: $(PROJECT_NAME)-$(API_VERSION).pc
 		-e 's|@PKG_DEPS@|$(PKG_DEPS)|g' \
 		$< > $@
 
-# Clean rule
+# Clean current build type only
 .PHONY: clean
 clean:
-	$(ECHO) "  CLEAN"
+	$(ECHO) "  CLEAN   $(BUILD_TYPE)"
+	$(Q)rm -rf $(BUILDDIR)/$(BUILD_TYPE)
+
+# Clean all build types
+.PHONY: clean-all
+clean-all:
+	$(ECHO) "  CLEAN   all"
 	$(Q)rm -rf $(BUILDDIR)
-	$(Q)rm -f $(LIB_NAME).so $(LIB_SONAME) $(LIB_FILENAME) $(LIB_STATIC)
-	$(Q)rm -f $(GIR_FILE) $(TYPELIB_FILE)
 
 # Distclean rule
 .PHONY: distclean
-distclean: clean
-	$(Q)rm -f *~
-	$(Q)rm -f $(SRCDIR)/*~
-	$(Q)rm -f $(SRCDIR)/**/*~
+distclean: clean-all
+
+# Help
+.PHONY: help
+help:
+	@echo "htmx-glib build system"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all       - Build shared and static libraries (default)"
+	@echo "  shared    - Build shared library only"
+	@echo "  static    - Build static library only"
+	@echo "  gir       - Generate GObject introspection files"
+	@echo "  test      - Run unit tests"
+	@echo "  examples  - Build example programs"
+	@echo "  install   - Install to PREFIX (default: /usr/local)"
+	@echo "  uninstall - Remove installed files"
+	@echo "  clean     - Remove current build type ($(BUILD_TYPE))"
+	@echo "  clean-all - Remove all build artifacts"
+	@echo "  distclean - Same as clean-all"
+	@echo "  vars      - Print build variables"
+	@echo "  help      - Show this help"
+	@echo ""
+	@echo "Build options:"
+	@echo "  DEBUG=1      - Build with debug symbols and no optimization"
+	@echo "  ASAN=1       - Enable address sanitizer"
+	@echo "  UBSAN=1      - Enable undefined behavior sanitizer"
+	@echo "  GIR=1        - Enable GObject introspection generation"
+	@echo "  V=1          - Verbose build output"
+	@echo "  PREFIX=/path - Set installation prefix (default: /usr/local)"
+	@echo ""
+	@echo "Output directories:"
+	@echo "  make         -> build/release/"
+	@echo "  make DEBUG=1 -> build/debug/"
