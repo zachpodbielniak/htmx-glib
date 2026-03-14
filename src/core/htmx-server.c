@@ -211,8 +211,38 @@ htmx_server_start(
 
 	port = htmx_config_get_port(self->config);
 
-	if (!soup_server_listen_local(self->soup_server, port, 0, error)) {
-		return FALSE;
+	{
+		const gchar *host = htmx_config_get_host(self->config);
+		gboolean all = (host == NULL ||
+		                g_strcmp0(host, "0.0.0.0") == 0 ||
+		                g_strcmp0(host, "::") == 0);
+
+		if (all) {
+			if (!soup_server_listen_all(self->soup_server, port, 0, error))
+				return FALSE;
+		} else if (g_strcmp0(host, "127.0.0.1") == 0 ||
+		           g_strcmp0(host, "localhost") == 0) {
+			if (!soup_server_listen_local(self->soup_server, port, 0, error))
+				return FALSE;
+		} else {
+			GInetAddress  *inet_addr;
+			GSocketAddress *sock_addr;
+			gboolean        ok;
+
+			inet_addr = g_inet_address_new_from_string(host);
+			if (inet_addr == NULL) {
+				g_set_error(error,
+				            G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+				            "Invalid host address: %s", host);
+				return FALSE;
+			}
+			sock_addr = g_inet_socket_address_new(inet_addr, port);
+			ok = soup_server_listen(self->soup_server, sock_addr, 0, error);
+			g_object_unref(sock_addr);
+			g_object_unref(inet_addr);
+			if (!ok)
+				return FALSE;
+		}
 	}
 
 	self->is_running = TRUE;

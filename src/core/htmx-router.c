@@ -270,15 +270,16 @@ try_serve_static(HtmxRouter *self, const gchar *path)
 			g_autofree gchar *relative = NULL;
 			g_autofree gchar *full_path = NULL;
 			g_autofree gchar *content = NULL;
+			const gchar *rel;
 			gsize length;
 			GError *error = NULL;
 
 			relative = g_strdup(path + strlen(route->url_prefix));
-			if (relative[0] == '/') {
-				relative++;
-			}
+			rel = relative;
+			if (rel[0] == '/')
+				rel++;
 
-			full_path = g_build_filename(route->directory, relative, NULL);
+			full_path = g_build_filename(route->directory, rel, NULL);
 
 			if (g_file_get_contents(full_path, &content, &length, &error)) {
 				HtmxResponse *response;
