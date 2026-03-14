@@ -50,6 +50,11 @@ G_BEGIN_DECLS
 #include "core/htmx-i18n.h"
 #include "core/htmx-template-engine.h"
 #include "core/htmx-handler.h"
+#include "core/htmx-callback-handler.h"
+#include "core/htmx-uploaded-file.h"
+#include "core/htmx-compression.h"
+#include "core/htmx-validation-group.h"
+#include "core/htmx-metrics.h"
 #include "core/htmx-router.h"
 #include "core/htmx-server.h"
 
@@ -57,6 +62,7 @@ G_BEGIN_DECLS
 #include "model/htmx-attribute.h"
 #include "model/htmx-trigger.h"
 #include "model/htmx-swap.h"
+#include "model/htmx-sync.h"
 #include "model/htmx-headers.h"
 
 /* HTML element building */

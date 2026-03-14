@@ -422,6 +422,68 @@ htmx_input_type_from_string(const gchar *str)
 }
 
 /*
+ * Sync strategy enum strings
+ */
+static const gchar *sync_strategy_strings[] = {
+	"drop",
+	"abort",
+	"replace",
+	"queue first",
+	"queue last",
+	"queue all",
+	NULL
+};
+
+/*
+ * GType registration for HtmxSyncStrategy
+ */
+GType
+htmx_sync_strategy_get_type(void)
+{
+	static gsize g_type_id = 0;
+
+	if (g_once_init_enter(&g_type_id)) {
+		static const GEnumValue values[] = {
+			{ HTMX_SYNC_DROP, "HTMX_SYNC_DROP", "drop" },
+			{ HTMX_SYNC_ABORT, "HTMX_SYNC_ABORT", "abort" },
+			{ HTMX_SYNC_REPLACE, "HTMX_SYNC_REPLACE", "replace" },
+			{ HTMX_SYNC_QUEUE_FIRST, "HTMX_SYNC_QUEUE_FIRST", "queue-first" },
+			{ HTMX_SYNC_QUEUE_LAST, "HTMX_SYNC_QUEUE_LAST", "queue-last" },
+			{ HTMX_SYNC_QUEUE_ALL, "HTMX_SYNC_QUEUE_ALL", "queue-all" },
+			{ 0, NULL, NULL }
+		};
+		GType type_id = g_enum_register_static("HtmxSyncStrategy", values);
+		g_once_init_leave(&g_type_id, type_id);
+	}
+
+	return (GType)g_type_id;
+}
+
+const gchar *
+htmx_sync_strategy_to_string(HtmxSyncStrategy strategy)
+{
+	g_return_val_if_fail(strategy >= HTMX_SYNC_DROP && strategy <= HTMX_SYNC_QUEUE_ALL, NULL);
+
+	return sync_strategy_strings[strategy];
+}
+
+HtmxSyncStrategy
+htmx_sync_strategy_from_string(const gchar *str)
+{
+	gint i;
+
+	g_return_val_if_fail(str != NULL, -1);
+
+	for (i = 0; sync_strategy_strings[i] != NULL; i++) {
+		if (g_ascii_strcasecmp(str, sync_strategy_strings[i]) == 0) {
+			return (HtmxSyncStrategy)i;
+		}
+	}
+
+	return (HtmxSyncStrategy)-1;
+}
+
+/*
  * GType registration for HtmxCookieSameSite
  */
 GType

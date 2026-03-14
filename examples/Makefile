@@ -16,14 +16,15 @@ EXAMPLES = \
 	faq-accordion \
 	media-gallery \
 	documentation \
-	file-upload
+	file-upload \
+	new-features
 
 # Full paths to example binaries
 EXAMPLE_BINS = $(addprefix $(EXAMPLE_BUILDDIR)/,$(EXAMPLES))
 
 # Compiler flags - use local build
-EXAMPLE_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(BUILDDIR)
-EXAMPLE_LDFLAGS = -L.. -l$(PROJECT_NAME)-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$(shell pwd)/..
+EXAMPLE_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
+EXAMPLE_LDFLAGS = -L../$(OUTDIR) -l$(PROJECT_NAME)-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$(shell cd .. && pwd)/$(OUTDIR)
 
 .PHONY: all clean
 
@@ -44,7 +45,7 @@ clean:
 	$(Q)rmdir $(EXAMPLE_BUILDDIR) 2>/dev/null || true
 
 # Run targets for each example
-.PHONY: run-todo run-data-table run-blog run-faq run-media run-docs run-upload
+.PHONY: run-todo run-data-table run-blog run-faq run-media run-docs run-upload run-new-features
 
 run-todo: $(EXAMPLE_BUILDDIR)/todo-app
 	$(EXAMPLE_BUILDDIR)/todo-app
@@ -66,3 +67,6 @@ run-docs: $(EXAMPLE_BUILDDIR)/documentation
 
 run-upload: $(EXAMPLE_BUILDDIR)/file-upload
 	$(EXAMPLE_BUILDDIR)/file-upload
+
+run-new-features: $(EXAMPLE_BUILDDIR)/new-features
+	$(EXAMPLE_BUILDDIR)/new-features

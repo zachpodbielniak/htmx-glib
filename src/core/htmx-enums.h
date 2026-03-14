@@ -353,6 +353,51 @@ HtmxInputType
 htmx_input_type_from_string(const gchar *str);
 
 /**
+ * HtmxSyncStrategy:
+ * @HTMX_SYNC_DROP: Drop new request if one is in progress
+ * @HTMX_SYNC_ABORT: Abort the current request and send new one
+ * @HTMX_SYNC_REPLACE: Replace the current request (abort + send)
+ * @HTMX_SYNC_QUEUE_FIRST: Queue first request, discard subsequent
+ * @HTMX_SYNC_QUEUE_LAST: Queue last request, replacing previous
+ * @HTMX_SYNC_QUEUE_ALL: Queue all requests
+ *
+ * Strategies for synchronizing concurrent HTMX requests.
+ */
+typedef enum {
+	HTMX_SYNC_DROP = 0,
+	HTMX_SYNC_ABORT,
+	HTMX_SYNC_REPLACE,
+	HTMX_SYNC_QUEUE_FIRST,
+	HTMX_SYNC_QUEUE_LAST,
+	HTMX_SYNC_QUEUE_ALL
+} HtmxSyncStrategy;
+
+GType htmx_sync_strategy_get_type(void) G_GNUC_CONST;
+#define HTMX_TYPE_SYNC_STRATEGY (htmx_sync_strategy_get_type())
+
+/**
+ * htmx_sync_strategy_to_string:
+ * @strategy: an #HtmxSyncStrategy
+ *
+ * Converts a sync strategy enum to its string representation.
+ *
+ * Returns: (transfer none): the strategy string (e.g., "drop", "abort")
+ */
+const gchar *
+htmx_sync_strategy_to_string(HtmxSyncStrategy strategy);
+
+/**
+ * htmx_sync_strategy_from_string:
+ * @str: a sync strategy string
+ *
+ * Converts a sync strategy string to its enum value.
+ *
+ * Returns: the corresponding #HtmxSyncStrategy, or -1 on error
+ */
+HtmxSyncStrategy
+htmx_sync_strategy_from_string(const gchar *str);
+
+/**
  * HtmxCookieSameSite:
  * @HTMX_COOKIE_SAME_SITE_STRICT: Only send cookie for same-site requests
  * @HTMX_COOKIE_SAME_SITE_LAX: Send for same-site and top-level navigations

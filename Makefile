@@ -52,6 +52,11 @@ CORE_SOURCES = \
 	$(COREDIR)/htmx-i18n.c \
 	$(COREDIR)/htmx-template-engine.c \
 	$(COREDIR)/htmx-handler.c \
+	$(COREDIR)/htmx-callback-handler.c \
+	$(COREDIR)/htmx-uploaded-file.c \
+	$(COREDIR)/htmx-compression.c \
+	$(COREDIR)/htmx-validation-group.c \
+	$(COREDIR)/htmx-metrics.c \
 	$(COREDIR)/htmx-router.c \
 	$(COREDIR)/htmx-server.c
 
@@ -59,6 +64,7 @@ MODEL_SOURCES = \
 	$(MODELDIR)/htmx-attribute.c \
 	$(MODELDIR)/htmx-trigger.c \
 	$(MODELDIR)/htmx-swap.c \
+	$(MODELDIR)/htmx-sync.c \
 	$(MODELDIR)/htmx-headers.c
 
 ELEMENT_SOURCES = \

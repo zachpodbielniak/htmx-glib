@@ -36,6 +36,10 @@ typedef struct _HtmxTemplateEngine      HtmxTemplateEngine;
 typedef struct _HtmxExtensionRegistry   HtmxExtensionRegistry;
 typedef struct _HtmxSseConnection       HtmxSseConnection;
 typedef struct _HtmxWebSocketConnection HtmxWebSocketConnection;
+typedef struct _HtmxCallbackHandler     HtmxCallbackHandler;
+typedef struct _HtmxCompression         HtmxCompression;
+typedef struct _HtmxValidationGroup     HtmxValidationGroup;
+typedef struct _HtmxMetrics             HtmxMetrics;
 
 /*
  * GObject types (derivable classes)
@@ -57,6 +61,8 @@ typedef struct _HtmxTrigger             HtmxTrigger;
 typedef struct _HtmxSwap                HtmxSwap;
 typedef struct _HtmxRequestHeaders      HtmxRequestHeaders;
 typedef struct _HtmxResponseHeaders     HtmxResponseHeaders;
+typedef struct _HtmxSync                HtmxSync;
+typedef struct _HtmxUploadedFile        HtmxUploadedFile;
 
 /*
  * GInterface types

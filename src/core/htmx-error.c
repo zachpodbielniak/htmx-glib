@@ -25,7 +25,10 @@ static const gchar *error_messages[] = {
 	"SSE error",
 	"WebSocket error",
 	"Template error",
-	"Configuration error"
+	"Configuration error",
+	"Upload error",
+	"Compression error",
+	"Validation error"
 };
 
 /*
@@ -62,6 +65,9 @@ htmx_error_get_type(void)
 			{ HTMX_ERROR_WEBSOCKET_ERROR, "HTMX_ERROR_WEBSOCKET_ERROR", "websocket-error" },
 			{ HTMX_ERROR_TEMPLATE_ERROR, "HTMX_ERROR_TEMPLATE_ERROR", "template-error" },
 			{ HTMX_ERROR_CONFIG_ERROR, "HTMX_ERROR_CONFIG_ERROR", "config-error" },
+			{ HTMX_ERROR_UPLOAD_ERROR, "HTMX_ERROR_UPLOAD_ERROR", "upload-error" },
+			{ HTMX_ERROR_COMPRESSION_ERROR, "HTMX_ERROR_COMPRESSION_ERROR", "compression-error" },
+			{ HTMX_ERROR_VALIDATION_ERROR, "HTMX_ERROR_VALIDATION_ERROR", "validation-error" },
 			{ 0, NULL, NULL }
 		};
 		GType type_id = g_enum_register_static("HtmxError", values);
@@ -77,7 +83,7 @@ htmx_error_get_type(void)
 const gchar *
 htmx_error_to_string(HtmxError error)
 {
-	g_return_val_if_fail(error >= HTMX_ERROR_INVALID_REQUEST && error <= HTMX_ERROR_CONFIG_ERROR, NULL);
+	g_return_val_if_fail(error >= HTMX_ERROR_INVALID_REQUEST && error <= HTMX_ERROR_VALIDATION_ERROR, NULL);
 
 	return error_messages[error];
 }

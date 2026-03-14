@@ -40,6 +40,9 @@ G_BEGIN_DECLS
  * @HTMX_ERROR_WEBSOCKET_ERROR: A WebSocket-related error occurred
  * @HTMX_ERROR_TEMPLATE_ERROR: A template parsing or rendering error occurred
  * @HTMX_ERROR_CONFIG_ERROR: A configuration error occurred
+ * @HTMX_ERROR_UPLOAD_ERROR: A file upload parsing error occurred
+ * @HTMX_ERROR_COMPRESSION_ERROR: A compression error occurred
+ * @HTMX_ERROR_VALIDATION_ERROR: A validation error occurred
  *
  * Error codes returned by htmx-glib functions.
  */
@@ -58,7 +61,10 @@ typedef enum {
 	HTMX_ERROR_SSE_ERROR,
 	HTMX_ERROR_WEBSOCKET_ERROR,
 	HTMX_ERROR_TEMPLATE_ERROR,
-	HTMX_ERROR_CONFIG_ERROR
+	HTMX_ERROR_CONFIG_ERROR,
+	HTMX_ERROR_UPLOAD_ERROR,
+	HTMX_ERROR_COMPRESSION_ERROR,
+	HTMX_ERROR_VALIDATION_ERROR
 } HtmxError;
 
 GType htmx_error_get_type(void) G_GNUC_CONST;

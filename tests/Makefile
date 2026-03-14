@@ -5,11 +5,14 @@
 include ../config.mk
 
 # Test programs
-TESTS = test-enums test-attribute test-trigger test-swap test-headers test-builder test-elements test-document
+TESTS = test-enums test-attribute test-trigger test-swap test-headers \
+        test-builder test-elements test-document \
+        test-sync test-handler test-upload test-compression \
+        test-validation-group test-metrics
 
-# Compiler flags - use local build
-TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(BUILDDIR)
-TEST_LDFLAGS = -L.. -l$(PROJECT_NAME)-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$(shell pwd)/..
+# Compiler flags - use the build output directory for library and generated headers
+TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
+TEST_LDFLAGS = -L../$(OUTDIR) -lhtmx-glib-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$(shell cd .. && pwd)/$(OUTDIR)
 
 .PHONY: all clean run
 
@@ -44,6 +47,30 @@ test-elements: test-elements.c
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-document: test-document.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-sync: test-sync.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-handler: test-handler.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-upload: test-upload.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-compression: test-compression.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-validation-group: test-validation-group.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-metrics: test-metrics.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
