@@ -74,7 +74,29 @@ parse_query_string(const gchar *query)
 static GHashTable *
 parse_form_data(const gchar *body)
 {
-	return parse_query_string(body);
+	g_autofree gchar *decoded = NULL;
+	gchar *p;
+
+	if (body == NULL)
+		return parse_query_string(NULL);
+
+	/*
+	 * In application/x-www-form-urlencoded a '+' means a space.
+	 * parse_query_string() only handles %XX, so without this every
+	 * form field containing a space came back with literal '+'
+	 * characters -- "yes, after the backup" arriving as
+	 * "yes,+after+the+backup".
+	 *
+	 * Substituted BEFORE unescaping, so a genuine plus sent as %2B
+	 * still decodes to '+' rather than being turned into a space.
+	 */
+	decoded = g_strdup(body);
+	for (p = decoded; *p != '\0'; p++) {
+		if (*p == '+')
+			*p = ' ';
+	}
+
+	return parse_query_string(decoded);
 }
 
 /*
