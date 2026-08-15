@@ -248,9 +248,17 @@ htmx_request_new_from_message(SoupServerMessage *message)
 	/* Parse HTMX headers */
 	self->htmx_headers = parse_htmx_headers(message);
 
-	/* Get Content-Type */
+	/*
+	 * Get Content-Type. The raw header, not
+	 * soup_message_headers_get_content_type(): that accessor strips the
+	 * parameters, and for multipart/form-data the boundary parameter IS
+	 * the payload framing -- htmx_uploaded_file_parse_multipart() cannot
+	 * parse a body whose boundary was thrown away here. Prefix checks on
+	 * the media type work unchanged either way.
+	 */
 	headers = soup_server_message_get_request_headers(message);
-	self->content_type = g_strdup(soup_message_headers_get_content_type(headers, NULL));
+	self->content_type = g_strdup(soup_message_headers_get_one(headers,
+	                                                           "Content-Type"));
 
 	/* Get body */
 	body = soup_server_message_get_request_body(message);

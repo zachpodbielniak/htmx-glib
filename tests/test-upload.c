@@ -304,6 +304,58 @@ test_multipart_parse_only_fields(void)
 	g_bytes_unref(body);
 }
 
+/*
+ * A part whose payload contains NUL and high bytes -- which is every real
+ * file upload that is not plain text. The parser used to search the body
+ * with g_strstr_len(), which despite its length parameter stops at the
+ * first NUL, so a PDF upload "succeeded" with zero files parsed.
+ */
+static void
+test_multipart_parse_binary_payload(void)
+{
+	static const gchar head[] =
+		"--BND\r\n"
+		"Content-Disposition: form-data; name=\"file\"; "
+		"filename=\"doc.pdf\"\r\n"
+		"Content-Type: application/pdf\r\n"
+		"\r\n";
+	static const guchar payload[] = {
+		'%', 'P', 'D', 'F', 0x00, 0x01, 0xff, 0x00, 'e', 'n', 'd'
+	};
+	static const gchar tail[] = "\r\n--BND--\r\n";
+	GError *error = NULL;
+	GPtrArray *files;
+	GByteArray *raw;
+	GBytes *body;
+	GBytes *data;
+	HtmxUploadedFile *file;
+
+	raw = g_byte_array_new();
+	g_byte_array_append(raw, (const guchar *)head, strlen(head));
+	g_byte_array_append(raw, payload, sizeof(payload));
+	g_byte_array_append(raw, (const guchar *)tail, strlen(tail));
+	body = g_byte_array_free_to_bytes(raw);
+
+	files = htmx_uploaded_file_parse_multipart(
+		"multipart/form-data; boundary=BND", body, NULL, &error);
+
+	g_assert_no_error(error);
+	g_assert_nonnull(files);
+	g_assert_cmpuint(files->len, ==, 1);
+
+	file = g_ptr_array_index(files, 0);
+	g_assert_cmpuint(htmx_uploaded_file_get_size(file), ==,
+	                 sizeof(payload));
+
+	/* Byte-for-byte, not merely the right length. */
+	data = htmx_uploaded_file_get_data(file);
+	g_assert_cmpmem(g_bytes_get_data(data, NULL),
+	                g_bytes_get_size(data), payload, sizeof(payload));
+
+	g_ptr_array_unref(files);
+	g_bytes_unref(body);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -320,6 +372,7 @@ main(int argc, char *argv[])
 	g_test_add_func("/upload/multipart/multiple_files", test_multipart_parse_multiple_files);
 	g_test_add_func("/upload/multipart/no_boundary", test_multipart_parse_no_boundary);
 	g_test_add_func("/upload/multipart/only_fields", test_multipart_parse_only_fields);
+	g_test_add_func("/upload/multipart/binary_payload", test_multipart_parse_binary_payload);
 
 	return g_test_run();
 }

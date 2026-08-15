@@ -230,6 +230,35 @@ extract_param(const gchar *header_value, const gchar *param_name)
 	return g_strndup(start, (gsize)(end - start));
 }
 
+/*
+ * memmem, privately. g_strstr_len() looks length-bounded but is still a
+ * string function: it stops at the first NUL byte in the haystack. A
+ * multipart body carrying a PDF or any other binary file is full of NULs,
+ * so searching it with a string function silently loses every part after
+ * the first binary byte -- the parse "succeeds" with zero files.
+ */
+static const gchar *
+find_bytes(const gchar *haystack,
+           gsize        haystack_len,
+           const gchar *needle,
+           gsize        needle_len)
+{
+	const gchar *p;
+	const gchar *end;
+
+	if (needle_len == 0 || haystack_len < needle_len)
+		return NULL;
+
+	end = haystack + haystack_len - needle_len;
+
+	for (p = haystack; p <= end; p++) {
+		if (p[0] == needle[0] && memcmp(p, needle, needle_len) == 0)
+			return p;
+	}
+
+	return NULL;
+}
+
 GPtrArray *
 htmx_uploaded_file_parse_multipart(const gchar  *content_type,
                                     GBytes       *body,
@@ -266,7 +295,7 @@ htmx_uploaded_file_parse_multipart(const gchar  *content_type,
 	fields = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	/* Find first delimiter */
-	pos = g_strstr_len(body_str, (gssize)body_len, delimiter);
+	pos = find_bytes(body_str, body_len, delimiter, delim_len);
 	if (pos == NULL) {
 		g_set_error(error, HTMX_ERROR, HTMX_ERROR_INVALID_REQUEST,
 		            "No multipart boundary found in body");
@@ -299,12 +328,16 @@ htmx_uploaded_file_parse_multipart(const gchar  *content_type,
 		part_start = pos;
 
 		/* Find next delimiter */
-		next_delim = g_strstr_len(pos, (gssize)(body_str + body_len - pos), delimiter);
+		next_delim = find_bytes(pos, (gsize)(body_str + body_len - pos),
+		                        delimiter, delim_len);
 		if (next_delim == NULL)
 			break;
 
-		/* Find header/body separator (empty line) */
-		header_end = strstr(part_start, "\r\n\r\n");
+		/* Find header/body separator (empty line), bounded to this
+		 * part -- the headers are text, but what follows them is not */
+		header_end = find_bytes(part_start,
+		                        (gsize)(next_delim - part_start),
+		                        "\r\n\r\n", 4);
 		if (header_end == NULL || header_end >= next_delim) {
 			pos = next_delim + delim_len;
 			continue;
