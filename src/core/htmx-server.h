@@ -104,6 +104,53 @@ htmx_server_use(
 );
 
 /**
+ * htmx_server_listen_on:
+ * @self: an #HtmxServer
+ * @host: (nullable): an address to bind -- a numeric address, "localhost",
+ *   or %NULL / "0.0.0.0" / "::" for every interface
+ * @port: the port to listen on
+ * @error: (nullable): return location for an error
+ *
+ * Binds one more address, and may be called several times.
+ *
+ * htmx_server_start() binds exactly one address, which cannot express
+ * "the loopback and this one other interface" -- the ordinary shape for a
+ * service meant to be reachable from a private network and from the
+ * machine itself, without also appearing on whatever else the host is
+ * plugged into.
+ *
+ * Using this at all opts out of the configured host: a server told
+ * explicitly where to listen is not additionally given the config's
+ * default, which is every interface. Calling htmx_server_start()
+ * afterwards is harmless and does nothing.
+ *
+ * Returns: %TRUE if the address was bound
+ */
+gboolean
+htmx_server_listen_on(
+	HtmxServer  *self,
+	const gchar *host,
+	guint16      port,
+	GError     **error
+);
+
+/**
+ * htmx_server_get_listen_uris:
+ * @self: an #HtmxServer
+ *
+ * The addresses the server is actually listening on.
+ *
+ * What was asked for and what was bound are different questions -- a
+ * convenience address whose bind failed is the interesting case -- so
+ * anything reporting where a server can be reached should report from
+ * here rather than from what it passed in.
+ *
+ * Returns: (transfer full) (element-type utf8): the URIs, as strings
+ */
+GSList *
+htmx_server_get_listen_uris(HtmxServer *self);
+
+/**
  * htmx_server_start:
  * @self: an #HtmxServer
  * @error: (nullable): return location for an error

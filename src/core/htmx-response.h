@@ -44,6 +44,35 @@ HtmxResponse *
 htmx_response_new_with_content(const gchar *content);
 
 /**
+ * htmx_response_new_streaming:
+ *
+ * Creates a response meaning "the handler has taken this message over".
+ *
+ * A route handler that streams -- Server-Sent Events, or a body written a
+ * chunk at a time -- has already set the status, the headers and the body
+ * on the #SoupServerMessage it took from htmx_request_get_message().
+ * htmx_response_apply() leaves such a response entirely alone, which is
+ * what makes streaming reachable from the router at all: applying an
+ * ordinary response replaces Content-Type and appends a body, and
+ * returning %NULL is the 404 path.
+ *
+ * Returns: (transfer full): a new #HtmxResponse
+ */
+HtmxResponse *
+htmx_response_new_streaming(void);
+
+/**
+ * htmx_response_is_streaming:
+ * @self: an #HtmxResponse
+ *
+ * Whether @self means the handler owns the message.
+ *
+ * Returns: %TRUE if htmx_response_apply() will do nothing
+ */
+gboolean
+htmx_response_is_streaming(HtmxResponse *self);
+
+/**
  * htmx_response_set_content:
  * @self: an #HtmxResponse
  * @content: HTML content

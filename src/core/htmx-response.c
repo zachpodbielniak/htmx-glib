@@ -15,6 +15,7 @@ struct _HtmxResponse {
 	gchar               *content_type;  /* Content-Type header */
 	GHashTable          *custom_headers;/* Custom headers */
 	HtmxResponseHeaders *htmx_headers;  /* HTMX response headers */
+	gboolean             streaming;     /* Handler owns the message */
 };
 
 G_DEFINE_FINAL_TYPE(HtmxResponse, htmx_response, G_TYPE_OBJECT)
@@ -57,6 +58,7 @@ htmx_response_init(HtmxResponse *self)
 	self->content_type = g_strdup("text/html; charset=utf-8");
 	self->custom_headers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	self->htmx_headers = htmx_response_headers_new();
+	self->streaming = FALSE;
 }
 
 /*
@@ -80,6 +82,37 @@ htmx_response_new_with_content(const gchar *content)
 	htmx_response_set_content(self, content);
 
 	return self;
+}
+
+/*
+ * Create a response that says the handler has taken the message over.
+ *
+ * Without this a route cannot stream.  handle_request() applies whatever
+ * the handler returned -- and applying a response replaces Content-Type
+ * and appends a body, so an SSE handler's `text/event-stream` was
+ * overwritten by `text/html` before the first event went out.  Returning
+ * NULL was no better: that is the 404 path.
+ */
+HtmxResponse *
+htmx_response_new_streaming(void)
+{
+	HtmxResponse *self;
+
+	self = htmx_response_new();
+	self->streaming = TRUE;
+
+	return self;
+}
+
+/*
+ * Whether this response means "leave the message alone"
+ */
+gboolean
+htmx_response_is_streaming(HtmxResponse *self)
+{
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), FALSE);
+
+	return self->streaming;
 }
 
 /*
@@ -388,6 +421,15 @@ htmx_response_apply(
 
 	g_return_if_fail(HTMX_IS_RESPONSE(self));
 	g_return_if_fail(SOUP_IS_SERVER_MESSAGE(message));
+
+	/*
+	 * The handler is writing this message itself -- an SSE stream, or a
+	 * body produced a chunk at a time.  Touching the status, the headers
+	 * or the body here would undo what it has already set.
+	 */
+	if (self->streaming) {
+		return;
+	}
 
 	/* Set status */
 	soup_server_message_set_status(message, self->status_code, NULL);

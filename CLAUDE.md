@@ -147,6 +147,70 @@ render_something(void)
 - `examples/` - Example applications
 - `tests/` - GLib-based tests
 
+## Streaming (SSE)
+
+A route that streams returns `htmx_response_new_streaming()`, which tells
+`htmx_response_apply()` to leave the message alone.  Without it the
+router applies an ordinary response over the top -- replacing
+`Content-Type` and appending a body -- and returning `NULL` is the 404
+path, so neither works.
+
+```c
+static HtmxResponse *
+handle_events(HtmxRequest *request, GHashTable *params, gpointer user_data)
+{
+	HtmxSseConnection *conn;
+
+	conn = htmx_sse_connection_new(htmx_request_get_message(request));
+
+	/* The connection outlives this call.  Something has to own it --
+	 * here, the timer that writes to it. */
+	g_signal_connect(conn, "closed", G_CALLBACK(on_closed), NULL);
+	g_timeout_add_seconds(1, push_an_event, conn);
+
+	return htmx_response_new_streaming();
+}
+```
+
+`htmx_sse_connection_new()` sets the status, the SSE headers, chunked
+encoding and the pause for you.  The chunked encoding is not optional:
+without it libsoup takes the body's length at the moment the handler
+returns as the `Content-Length`, writes exactly that, and finishes -- so
+the stream delivers whatever the handler wrote inline and nothing after
+it.
+
+Connect to `HtmxSseConnection::closed` and drop whatever the connection
+owns.  A browser tab closes without saying anything at the HTTP level, so
+that signal is the only thing that will ever tell you.  It fires exactly
+once, whichever of the three routes gets there first: the peer hanging
+up, soup finishing the message, or your own `htmx_sse_connection_close()`.
+
+## Listening on more than one address
+
+`htmx_server_start()` binds exactly one address, which cannot express
+"the loopback and this one other interface".  `htmx_server_listen_on()`
+is additive and may be called several times; using it at all opts out of
+the configured host, so a server told explicitly where to listen is not
+also given the config's default of every interface.
+
+```c
+htmx_server_listen_on(server, "127.0.0.1", 8790, &error);
+htmx_server_listen_on(server, "100.84.12.7", 8790, &error);
+
+/* Report what was bound, not what was asked for: an address whose bind
+ * failed is the interesting case. */
+uris = htmx_server_get_listen_uris(server);
+```
+
+## Testing a route without a server
+
+`htmx_request_new_for_path()` builds a request with no `SoupServerMessage`
+behind it, so `htmx_router_match()` can be exercised directly.  Use it for
+the cases a real client cannot send -- libsoup normalises and rejects a
+lot before a handler ever runs, and those are the cases worth testing
+hardest.  `htmx_request_get_message()` is `NULL` on such a request, so it
+cannot be used with anything that streams.
+
 ## Building
 
 ```bash

@@ -222,6 +222,33 @@ htmx_request_init(HtmxRequest *self)
  * Create a new request from a SoupServerMessage
  */
 HtmxRequest *
+htmx_request_new_for_path(HtmxMethod method, const gchar *path)
+{
+	HtmxRequest *self;
+	const gchar *question;
+
+	g_return_val_if_fail(path != NULL, NULL);
+
+	self = g_object_new(HTMX_TYPE_REQUEST, NULL);
+	self->method = method;
+
+	question = strchr(path, '?');
+
+	if (question != NULL) {
+		self->path = g_strndup(path, (gsize)(question - path));
+		self->query = g_strdup(question + 1);
+	} else {
+		self->path = g_strdup(path);
+		self->query = NULL;
+	}
+
+	self->query_params = parse_query_string(self->query);
+	self->htmx_headers = htmx_request_headers_new();
+
+	return self;
+}
+
+HtmxRequest *
 htmx_request_new_from_message(SoupServerMessage *message)
 {
 	HtmxRequest *self;

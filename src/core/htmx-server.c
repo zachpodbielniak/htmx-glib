@@ -16,6 +16,7 @@ struct _HtmxServer {
 	HtmxMiddleware *middleware;
 	GMainLoop      *main_loop;
 	gboolean        is_running;
+	gboolean        explicit_listen;  /* htmx_server_listen_on() was used */
 };
 
 G_DEFINE_FINAL_TYPE(HtmxServer, htmx_server, G_TYPE_OBJECT)
@@ -113,6 +114,7 @@ static void
 htmx_server_init(HtmxServer *self)
 {
 	self->soup_server = NULL;
+	self->explicit_listen = FALSE;
 	self->router = htmx_router_new();
 	self->config = htmx_config_new();
 	self->middleware = htmx_middleware_new();
@@ -195,64 +197,116 @@ htmx_server_use(
 	htmx_middleware_use(self->middleware, func, user_data, destroy);
 }
 
+/*
+ * Bind one address, in whichever of soup's three forms fits it.
+ */
+static gboolean
+listen_one(
+	HtmxServer  *self,
+	const gchar *host,
+	guint16      port,
+	GError     **error
+){
+	gboolean all = (host == NULL ||
+	                g_strcmp0(host, "0.0.0.0") == 0 ||
+	                g_strcmp0(host, "::") == 0);
+
+	if (all) {
+		return soup_server_listen_all(self->soup_server, port, 0, error);
+	}
+
+	if (g_strcmp0(host, "127.0.0.1") == 0 ||
+	    g_strcmp0(host, "::1") == 0 ||
+	    g_strcmp0(host, "localhost") == 0) {
+		return soup_server_listen_local(self->soup_server, port, 0, error);
+	}
+
+	{
+		GInetAddress   *inet_addr;
+		GSocketAddress *sock_addr;
+		gboolean        ok;
+
+		inet_addr = g_inet_address_new_from_string(host);
+		if (inet_addr == NULL) {
+			g_set_error(error,
+			            G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+			            "Invalid host address: %s", host);
+			return FALSE;
+		}
+
+		sock_addr = g_inet_socket_address_new(inet_addr, port);
+		ok = soup_server_listen(self->soup_server, sock_addr, 0, error);
+		g_object_unref(sock_addr);
+		g_object_unref(inet_addr);
+
+		return ok;
+	}
+}
+
+gboolean
+htmx_server_listen_on(
+	HtmxServer  *self,
+	const gchar *host,
+	guint16      port,
+	GError     **error
+){
+	g_return_val_if_fail(HTMX_IS_SERVER(self), FALSE);
+
+	if (!listen_one(self, host, port, error)) {
+		return FALSE;
+	}
+
+	/*
+	 * Recorded so that start() does not then bind the configured address
+	 * as well.  A server told exactly where to listen must not also
+	 * acquire a port nobody asked for -- which for the default host of
+	 * "0.0.0.0" would be every interface on the machine.
+	 */
+	self->explicit_listen = TRUE;
+	self->is_running = TRUE;
+
+	return TRUE;
+}
+
+GSList *
+htmx_server_get_listen_uris(HtmxServer *self)
+{
+	GSList *uris;
+	GSList *out = NULL;
+	GSList *iter;
+
+	g_return_val_if_fail(HTMX_IS_SERVER(self), NULL);
+
+	uris = soup_server_get_uris(self->soup_server);
+
+	for (iter = uris; iter != NULL; iter = iter->next) {
+		out = g_slist_prepend(out, g_uri_to_string(iter->data));
+	}
+
+	g_slist_free_full(uris, (GDestroyNotify)g_uri_unref);
+
+	return g_slist_reverse(out);
+}
+
 gboolean
 htmx_server_start(
 	HtmxServer *self,
 	GError    **error
 ){
-	guint16 port;
-	GSList *uris;
-
 	g_return_val_if_fail(HTMX_IS_SERVER(self), FALSE);
 
 	if (self->is_running) {
 		return TRUE;
 	}
 
-	port = htmx_config_get_port(self->config);
-
-	{
-		const gchar *host = htmx_config_get_host(self->config);
-		gboolean all = (host == NULL ||
-		                g_strcmp0(host, "0.0.0.0") == 0 ||
-		                g_strcmp0(host, "::") == 0);
-
-		if (all) {
-			if (!soup_server_listen_all(self->soup_server, port, 0, error))
-				return FALSE;
-		} else if (g_strcmp0(host, "127.0.0.1") == 0 ||
-		           g_strcmp0(host, "localhost") == 0) {
-			if (!soup_server_listen_local(self->soup_server, port, 0, error))
-				return FALSE;
-		} else {
-			GInetAddress  *inet_addr;
-			GSocketAddress *sock_addr;
-			gboolean        ok;
-
-			inet_addr = g_inet_address_new_from_string(host);
-			if (inet_addr == NULL) {
-				g_set_error(error,
-				            G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-				            "Invalid host address: %s", host);
-				return FALSE;
-			}
-			sock_addr = g_inet_socket_address_new(inet_addr, port);
-			ok = soup_server_listen(self->soup_server, sock_addr, 0, error);
-			g_object_unref(sock_addr);
-			g_object_unref(inet_addr);
-			if (!ok)
-				return FALSE;
-		}
+	if (!listen_one(self,
+	                htmx_config_get_host(self->config),
+	                htmx_config_get_port(self->config),
+	                error)) {
+		return FALSE;
 	}
 
 	self->is_running = TRUE;
-
-	uris = soup_server_get_uris(self->soup_server);
-	if (uris != NULL) {
-		g_autofree gchar *uri_str = g_uri_to_string(uris->data);
-		g_print("Server listening on %s\n", uri_str);
-		g_slist_free_full(uris, (GDestroyNotify)g_uri_unref);
-	}
 
 	return TRUE;
 }
@@ -268,6 +322,7 @@ htmx_server_stop(HtmxServer *self)
 
 	soup_server_disconnect(self->soup_server);
 	self->is_running = FALSE;
+	self->explicit_listen = FALSE;
 
 	if (self->main_loop != NULL && g_main_loop_is_running(self->main_loop)) {
 		g_main_loop_quit(self->main_loop);

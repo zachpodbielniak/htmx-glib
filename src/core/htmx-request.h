@@ -34,6 +34,28 @@ HtmxRequest *
 htmx_request_new_from_message(SoupServerMessage *message);
 
 /**
+ * htmx_request_new_for_path:
+ * @method: the HTTP method
+ * @path: the request path, with an optional query string
+ *
+ * Builds a request with no message behind it.
+ *
+ * Routing is a pure function over a method and a path, and until this
+ * existed it could only be exercised by standing up a server and talking
+ * to it over a socket -- so the cases worth testing hardest, the ones a
+ * real client cannot send because libsoup rejects them first, could not
+ * be tested at all.
+ *
+ * htmx_request_get_message() is %NULL on such a request, so it cannot be
+ * used with anything that streams.
+ *
+ * Returns: (transfer full): a new #HtmxRequest
+ */
+HtmxRequest *
+htmx_request_new_for_path(HtmxMethod   method,
+                          const gchar *path);
+
+/**
  * htmx_request_get_message:
  * @self: an #HtmxRequest
  *

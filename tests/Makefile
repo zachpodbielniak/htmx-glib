@@ -8,7 +8,7 @@ include ../config.mk
 TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-builder test-elements test-document \
         test-sync test-handler test-upload test-compression \
-        test-validation-group test-metrics
+        test-validation-group test-metrics test-streaming
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -17,6 +17,10 @@ TEST_LDFLAGS = -L../$(OUTDIR) -lhtmx-glib-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$
 .PHONY: all clean run
 
 all: $(TESTS)
+
+test-streaming: test-streaming.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-enums: test-enums.c
 	$(ECHO) "  CC      $@"

@@ -200,8 +200,8 @@ shared: $(LIB_SHARED)
 $(LIB_SHARED): $(OBJECTS) | $(OUTDIR)
 	$(ECHO) "  LD      $@"
 	$(Q)$(CC) -shared -Wl,-soname,$(LIB_SONAME) -o $@ $(OBJECTS) $(LDFLAGS)
-	$(Q)cd $(OUTDIR) && ln -sf $(notdir $(LIB_SHARED)) $(LIB_SONAME) 2>/dev/null || true
-	$(Q)cd $(OUTDIR) && ln -sf $(LIB_SONAME) $(LIB_NAME).so 2>/dev/null || true
+	$(Q)CDPATH= cd $(OUTDIR) && ln -sf $(notdir $(LIB_SHARED)) $(LIB_SONAME) 2>/dev/null || true
+	$(Q)CDPATH= cd $(OUTDIR) && ln -sf $(LIB_SONAME) $(LIB_NAME).so 2>/dev/null || true
 
 # Static library
 .PHONY: static
@@ -283,8 +283,8 @@ install: all
 	$(Q)install -d $(DESTDIR)$(INCLUDEDIR)/extensions
 	$(Q)install -d $(DESTDIR)$(PKGCONFIGDIR)
 	$(Q)install -m 755 $(LIB_SHARED) $(DESTDIR)$(LIBDIR)/
-	$(Q)cd $(DESTDIR)$(LIBDIR) && ln -sf $(notdir $(LIB_SHARED)) $(LIB_SONAME)
-	$(Q)cd $(DESTDIR)$(LIBDIR) && ln -sf $(LIB_SONAME) $(LIB_NAME).so
+	$(Q)CDPATH= cd $(DESTDIR)$(LIBDIR) && ln -sf $(notdir $(LIB_SHARED)) $(LIB_SONAME)
+	$(Q)CDPATH= cd $(DESTDIR)$(LIBDIR) && ln -sf $(LIB_SONAME) $(LIB_NAME).so
 	$(Q)install -m 644 $(LIB_STATIC) $(DESTDIR)$(LIBDIR)/
 	$(Q)install -m 644 $(SRCDIR)/htmx-glib.h $(DESTDIR)$(INCLUDEDIR)/
 	$(Q)install -m 644 $(SRCDIR)/htmx-types.h $(DESTDIR)$(INCLUDEDIR)/
