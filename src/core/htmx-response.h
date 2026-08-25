@@ -99,6 +99,29 @@ const gchar *
 htmx_response_get_content(HtmxResponse *self);
 
 /**
+ * htmx_response_append_header:
+ * @self: an #HtmxResponse
+ * @name: header name
+ * @value: header value
+ *
+ * Adds a header that may appear more than once.
+ *
+ * htmx_response_add_header() keeps one value per name, which is right
+ * for Content-Type and wrong for `Set-Cookie` -- the one header whose
+ * whole purpose is to appear several times. Five cookies added through
+ * it arrive as one, and the four that were overwritten are simply not
+ * set, with nothing to say so.
+ *
+ * Returns: (transfer none): @self for chaining
+ */
+HtmxResponse *
+htmx_response_append_header(
+	HtmxResponse *self,
+	const gchar  *name,
+	const gchar  *value
+);
+
+/**
  * htmx_response_set_status:
  * @self: an #HtmxResponse
  * @status_code: HTTP status code

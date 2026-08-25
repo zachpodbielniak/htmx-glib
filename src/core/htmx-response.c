@@ -13,7 +13,8 @@ struct _HtmxResponse {
 	gchar               *content;       /* Response body */
 	guint                status_code;   /* HTTP status code */
 	gchar               *content_type;  /* Content-Type header */
-	GHashTable          *custom_headers;/* Custom headers */
+	GHashTable          *custom_headers;/* Custom headers, one per name */
+	GPtrArray           *appended;      /* Headers that may repeat */
 	HtmxResponseHeaders *htmx_headers;  /* HTMX response headers */
 	gboolean             streaming;     /* Handler owns the message */
 };
@@ -31,6 +32,7 @@ htmx_response_finalize(GObject *object)
 	g_clear_pointer(&self->content, g_free);
 	g_clear_pointer(&self->content_type, g_free);
 	g_clear_pointer(&self->custom_headers, g_hash_table_unref);
+	g_clear_pointer(&self->appended, g_ptr_array_unref);
 	g_clear_pointer(&self->htmx_headers, htmx_response_headers_free);
 
 	G_OBJECT_CLASS(htmx_response_parent_class)->finalize(object);
@@ -57,6 +59,7 @@ htmx_response_init(HtmxResponse *self)
 	self->status_code = 200;
 	self->content_type = g_strdup("text/html; charset=utf-8");
 	self->custom_headers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	self->appended = g_ptr_array_new_with_free_func(g_free);
 	self->htmx_headers = htmx_response_headers_new();
 	self->streaming = FALSE;
 }
@@ -197,6 +200,24 @@ htmx_response_add_header(
 	g_return_val_if_fail(name != NULL, NULL);
 
 	g_hash_table_insert(self->custom_headers, g_strdup(name), g_strdup(value));
+
+	return self;
+}
+
+/*
+ * Add a header that may appear more than once
+ */
+HtmxResponse *
+htmx_response_append_header(
+	HtmxResponse *self,
+	const gchar  *name,
+	const gchar  *value
+){
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), NULL);
+	g_return_val_if_fail(name != NULL, NULL);
+
+	g_ptr_array_add(self->appended, g_strdup(name));
+	g_ptr_array_add(self->appended, g_strdup(value));
 
 	return self;
 }
@@ -444,6 +465,18 @@ htmx_response_apply(
 
 	/* Add custom headers */
 	g_hash_table_foreach(self->custom_headers, add_custom_header, headers);
+
+	/* Then the ones allowed to repeat, in the order they were added */
+	{
+		guint i;
+
+		for (i = 0; i + 1 < self->appended->len; i += 2) {
+			soup_message_headers_append(
+				headers,
+				g_ptr_array_index(self->appended, i),
+				g_ptr_array_index(self->appended, i + 1));
+		}
+	}
 
 	/* Apply HTMX headers */
 	htmx_response_headers_apply(self->htmx_headers, message);
