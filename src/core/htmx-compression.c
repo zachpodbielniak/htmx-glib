@@ -87,7 +87,6 @@ compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
 	guint8 out_buf[65536];
 	GByteArray *output;
 	gsize total_read;
-	gsize total_written;
 	gsize bytes_read;
 	gsize bytes_written;
 	GError *error = NULL;
@@ -98,7 +97,6 @@ compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
 	converter = G_CONVERTER(compressor);
 	output = g_byte_array_new();
 	total_read = 0;
-	total_written = 0;
 
 	while (total_read < data_len) {
 		result = g_converter_convert(
@@ -118,7 +116,11 @@ compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
 		}
 
 		total_read += bytes_read;
-		total_written += bytes_written;
+		/*
+		 * bytes_written is the converter's own count for this pass and
+		 * is used through `output`; there is no running total, because
+		 * nothing ever read one.  It was accumulated and discarded.
+		 */
 		g_byte_array_append(output, out_buf, (guint)bytes_written);
 
 		if (result == G_CONVERTER_FINISHED)

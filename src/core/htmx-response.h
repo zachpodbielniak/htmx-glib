@@ -88,6 +88,38 @@ htmx_response_set_content(
 );
 
 /**
+ * htmx_response_set_bytes:
+ * @self: a #HtmxResponse
+ * @bytes: (nullable): the body
+ *
+ * Sets the response body to bytes rather than to a string.
+ *
+ * htmx_response_set_content() takes a NUL-terminated string, which is
+ * right for HTML and cannot carry a PNG: the first zero byte would end
+ * the body, so an image served that way arrives truncated at a length
+ * that depends on the picture.  Bytes win over content when both are
+ * set.
+ *
+ * Returns: (transfer none): @self, for chaining
+ */
+HtmxResponse *
+htmx_response_set_bytes(
+	HtmxResponse *self,
+	GBytes       *bytes
+);
+
+/**
+ * htmx_response_get_bytes:
+ * @self: a #HtmxResponse
+ *
+ * The body bytes, if this response was given any.
+ *
+ * Returns: (transfer none) (nullable): the bytes
+ */
+GBytes *
+htmx_response_get_bytes(HtmxResponse *self);
+
+/**
  * htmx_response_get_content:
  * @self: an #HtmxResponse
  *

@@ -11,6 +11,7 @@ struct _HtmxResponse {
 	GObject parent_instance;
 
 	gchar               *content;       /* Response body */
+	GBytes              *bytes;         /* ...or the body, verbatim */
 	guint                status_code;   /* HTTP status code */
 	gchar               *content_type;  /* Content-Type header */
 	GHashTable          *custom_headers;/* Custom headers, one per name */
@@ -30,6 +31,7 @@ htmx_response_finalize(GObject *object)
 	HtmxResponse *self = HTMX_RESPONSE(object);
 
 	g_clear_pointer(&self->content, g_free);
+	g_clear_pointer(&self->bytes, g_bytes_unref);
 	g_clear_pointer(&self->content_type, g_free);
 	g_clear_pointer(&self->custom_headers, g_hash_table_unref);
 	g_clear_pointer(&self->appended, g_ptr_array_unref);
@@ -132,6 +134,36 @@ htmx_response_set_content(
 	self->content = g_strdup(content);
 
 	return self;
+}
+
+/*
+ * Set the response body to bytes, verbatim
+ */
+HtmxResponse *
+htmx_response_set_bytes(
+	HtmxResponse *self,
+	GBytes       *bytes
+){
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), NULL);
+
+	g_clear_pointer(&self->bytes, g_bytes_unref);
+
+	if (bytes != NULL) {
+		self->bytes = g_bytes_ref(bytes);
+	}
+
+	return self;
+}
+
+/*
+ * Get the response body bytes, if it was given any
+ */
+GBytes *
+htmx_response_get_bytes(HtmxResponse *self)
+{
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), NULL);
+
+	return self->bytes;
 }
 
 /*
@@ -483,7 +515,22 @@ htmx_response_apply(
 
 	/* Set body */
 	body = soup_server_message_get_response_body(message);
-	if (self->content != NULL) {
+
+	/*
+	 * Bytes win over content.
+	 *
+	 * `content` is a NUL-terminated string, which is right for HTML and
+	 * cannot carry a PNG: the first zero byte would end the body, so an
+	 * image served that way arrives truncated at a length that depends
+	 * on the picture.  A response that has been given bytes uses them
+	 * and its length rather than strlen().
+	 */
+	if (self->bytes != NULL) {
+		gsize size = 0;
+		const gchar *data = g_bytes_get_data(self->bytes, &size);
+
+		soup_message_body_append(body, SOUP_MEMORY_COPY, data, size);
+	} else if (self->content != NULL) {
 		soup_message_body_append(body, SOUP_MEMORY_COPY, self->content, strlen(self->content));
 	}
 }
