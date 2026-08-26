@@ -189,6 +189,18 @@ GENERATED = \
 # Include common rules
 include rules.mk
 
+#
+# Named, not inferred.
+#
+# make takes the first target it sees, and rules.mk is included above --
+# so the default goal was $(OUTDIR), the rule that makes the build
+# directory. A bare `make` therefore answered "'build/release' is up to
+# date." and exited 0 having compiled nothing, which is indistinguishable
+# from a successful build until you look at a timestamp. libreclaw and
+# clawtilla both name it; this one had not.
+#
+.DEFAULT_GOAL := all
+
 # Default target
 .PHONY: all
 all: $(GENERATED) $(LIB_SHARED) $(LIB_STATIC)
