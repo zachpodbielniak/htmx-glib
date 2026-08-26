@@ -180,6 +180,30 @@ length_data_free(gpointer data)
 	g_slice_free(LengthData, ld);
 }
 
+/*
+ * A caller's message is text, and only the built-in default is ever a
+ * format string.
+ *
+ * Both length validators used to hand `ld->message` straight to
+ * g_strdup_printf() as its format, so a message containing `%s` read a
+ * pointer that was never passed and one containing `%n` wrote through
+ * it.  The message reaches here from wherever the caller got it --
+ * often a form definition or a config file -- and GCC said so all
+ * along, in two -Wformat-nonliteral warnings nobody had turned into a
+ * failure.
+ *
+ * The literal stays at each call site rather than being passed in as a
+ * `fallback` argument, because a format string arriving as a parameter
+ * is exactly the construct being removed: it would compile to the same
+ * warning and leave the next reader to work out that this one is safe.
+ *
+ * Nothing is lost by it.  The documented contract is a "custom error
+ * message", never a template, and a caller who wants the count in their
+ * own wording already passed that count in as @min or @max.  It also
+ * settles an inconsistency: htmx_validation_group_validate() renders
+ * the same custom string through g_strdup(), so one message rendered
+ * two different ways depending on which path produced it.
+ */
 static gboolean
 validate_min_length(const gchar *value, gpointer user_data, gchar **error)
 {
@@ -187,9 +211,11 @@ validate_min_length(const gchar *value, gpointer user_data, gchar **error)
 
 	if (value == NULL || g_utf8_strlen(value, -1) < (glong)ld->threshold) {
 		if (error != NULL) {
-			*error = g_strdup_printf(
-				ld->message != NULL ? ld->message :
-				"Must be at least %u characters", ld->threshold);
+			*error = (ld->message != NULL)
+				? g_strdup(ld->message)
+				: g_strdup_printf(
+					"Must be at least %u characters",
+					ld->threshold);
 		}
 		return FALSE;
 	}
@@ -203,9 +229,11 @@ validate_max_length(const gchar *value, gpointer user_data, gchar **error)
 
 	if (value != NULL && g_utf8_strlen(value, -1) > (glong)ld->threshold) {
 		if (error != NULL) {
-			*error = g_strdup_printf(
-				ld->message != NULL ? ld->message :
-				"Must be at most %u characters", ld->threshold);
+			*error = (ld->message != NULL)
+				? g_strdup(ld->message)
+				: g_strdup_printf(
+					"Must be at most %u characters",
+					ld->threshold);
 		}
 		return FALSE;
 	}

@@ -125,9 +125,15 @@ htmx_validator_required(const gchar *error_message);
 /**
  * htmx_validator_min_length:
  * @min: minimum length
- * @error_message: (nullable): custom error message
+ * @error_message: (nullable): custom error message, used verbatim
  *
  * Creates a validator that requires a minimum string length.
+ *
+ * @error_message is text, not a template: a percent sequence in it is
+ * shown as typed rather than substituted, so a message taken from a
+ * form definition or a config file is safe to pass. Only the built-in
+ * default carries the count. A caller wanting it in their own wording
+ * already has it -- it is @min.
  *
  * Returns: (transfer full): a new #HtmxValidator
  */
@@ -137,9 +143,12 @@ htmx_validator_min_length(guint min, const gchar *error_message);
 /**
  * htmx_validator_max_length:
  * @max: maximum length
- * @error_message: (nullable): custom error message
+ * @error_message: (nullable): custom error message, used verbatim
  *
  * Creates a validator that enforces a maximum string length.
+ *
+ * As with htmx_validator_min_length(), @error_message is text rather
+ * than a template and a percent sequence in it is shown as typed.
  *
  * Returns: (transfer full): a new #HtmxValidator
  */
