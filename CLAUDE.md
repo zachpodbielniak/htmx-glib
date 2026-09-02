@@ -246,13 +246,50 @@ request and did exactly that.  `htmx_csrf_generate_token()` still means
 session changes.
 
 **Method safety is read from the request's method string, not from
-`HtmxMethod`.** That enum has five members -- GET, POST, PUT, PATCH,
-DELETE -- and `parse_method()` answers `HTMX_METHOD_GET` for every string
-that is not one of them.  So `method == HTMX_METHOD_GET` was not a test for
-GET: HEAD and OPTIONS passed it, which is right, and so did `FROB`,
-`PROPFIND` and anything else at all, which is a fail-open in the function
-whose answer decides whether a credential is required.  The safe methods
-are the four of RFC 9110 §9.2.1: GET, HEAD, OPTIONS, TRACE.
+`HtmxMethod`.** The enum answered `HTMX_METHOD_GET` for every string it
+did not recognise, so `method == HTMX_METHOD_GET` was not a test for GET:
+HEAD and OPTIONS passed it, which is right, and so did `FROB`, `PROPFIND`
+and anything else at all, which is a fail-open in the function whose
+answer decides whether a credential is required.  The safe methods are
+the four of RFC 9110 §9.2.1: GET, HEAD, OPTIONS, TRACE.
+
+The enum has since been fixed (below), so an unrecognised method is no
+longer a GET -- but the decision stays on the string.  OPTIONS and TRACE
+are safe and have no member, so a list of enum values could not express
+the set even now.
+
+## A method nobody recognised is not a GET
+
+`HtmxMethod` has `HTMX_METHOD_UNKNOWN`, appended so every value a caller
+compiled against keeps its number.  There is **one** string-to-method
+mapping, `htmx_method_from_string()`; `htmx-request.c` had a second,
+hand-written `parse_method()` that listed the same five names and ended
+`return HTMX_METHOD_GET`, and the two copies disagreed about exactly the
+case that matters.  `htmx_method_from_string()` answers
+`HTMX_METHOD_UNKNOWN` rather than the `-1` it used to, because `-1` is
+not a member of the type: nothing switching over it is warned, and
+nothing comparing against `HTMX_METHOD_GET` can see it.
+
+So `FROB /page` no longer matches a route registered with
+`htmx_router_get()`, and `FROB /static/x` is no longer served the file --
+both gates went through the one substitution.  A route **cannot** be
+registered for `HTMX_METHOD_UNKNOWN` (`htmx_router_add_route()` refuses
+it), because that would be one route every unrecognised method reaches at
+once.
+
+`HTMX_METHOD_HEAD` is named for one reason: HEAD was the half of the
+fall-through that was *right*.  RFC 9110 §9.3.2 makes HEAD identical to
+GET but for the content, and libsoup drops the body on the way out, so
+`route_method_matches()` matches HEAD against GET routes and the static
+tree deliberately.  Without that clause the fix would have turned every
+HEAD in every application on this library into a 404 while being
+described as being about `FROB`.  OPTIONS and TRACE get no such clause --
+answering them with whatever a GET route renders was never right.
+
+`method_strings[]` is indexed by the enum value, so a member without an
+entry is a read past the end of the array.  `test-enums.c` walks the
+registered `GEnumClass` and round-trips every member rather than listing
+them.
 
 ## A name that becomes a filename
 
@@ -326,7 +363,32 @@ make          # Build library
 make examples # Build examples
 make test     # Run tests
 make clean    # Clean build artifacts
+make GIR=1 gir  # .gir and .typelib (opt-in; nothing else needs them)
 ```
+
+### `--library` is a stem and `--namespace` is not a prefix
+
+`--library=$(LIB_NAME)` put `-llibhtmx-glib-1.0` on the scanner's own
+link line, and `make GIR=1 gir` died with `cannot find
+-llibhtmx-glib-1.0` every time anybody ran it.  `GIR_LIBRARY` in
+`config.mk` is the same name without the `lib`.
+
+`--namespace=HtmxGlib` implies an identifier prefix of `HtmxGlib` and a
+symbol prefix of `htmx_glib_`, and every type here is `Htmx*` on
+`htmx_*`, so the scanner disowned all of them: 1145 `Unknown namespace
+for identifier` warnings under `--warn-all`.  `--identifier-prefix=Htmx`
+and `--symbol-prefix=htmx` are what make the namespace and the C names
+agree.
+
+Fourteen warnings remain, all annotation gaps in public headers rather
+than build failures: eleven callback arguments with no `(scope)`
+(`htmx_middleware_run`, four `htmx_*_middleware` and six
+`htmx_router_*`), a return with no `(element-type)`
+(`htmx_extension_get_selectors`), a `(closure)` given an argument on a
+callback *type* (`HtmxMiddlewareFunc`), and `htmx_node_append_html_content`
+documented in both its header and its source.  Nothing consumes this
+`.gir` yet, which is the only reason they are being reported rather than
+fixed.
 
 ## Example Structure
 

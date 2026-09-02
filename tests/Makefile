@@ -10,7 +10,7 @@ TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-sync test-handler test-upload test-compression \
         test-validation-group test-validator test-metrics test-streaming \
         test-response-bytes test-serve-static test-template-engine \
-        test-secret test-csrf test-session test-request
+        test-secret test-csrf test-session test-request test-method
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -53,6 +53,10 @@ test-session: test-session.c
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-request: test-request.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-method: test-method.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 

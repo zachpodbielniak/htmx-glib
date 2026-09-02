@@ -113,6 +113,21 @@ TYPELIB_FILE    = $(OUTDIR)/$(GIR_NAMESPACE)-$(GIR_VERSION).typelib
 G_IR_SCANNER    = g-ir-scanner
 G_IR_COMPILER   = g-ir-compiler
 
+# What --library is spelled as.  It is a linker library *stem*, so the
+# "lib" belongs to the filename and not here: passing $(LIB_NAME) put
+# -llibhtmx-glib-1.0 on the scanner's own link line and `make GIR=1 gir`
+# died with "cannot find -llibhtmx-glib-1.0" every time it was run.
+GIR_LIBRARY     = $(PROJECT_NAME)-$(API_VERSION)
+
+# The prefixes g-ir-scanner would otherwise derive from the namespace.
+# HtmxGlib implies an identifier prefix of "HtmxGlib" and a symbol prefix
+# of "htmx_glib_", and every type here is Htmx* on htmx_*, so the scanner
+# disowned all of them: 1145 "Unknown namespace for identifier" warnings
+# under --warn-all, and a .gir whose types would have carried the C names
+# rather than introspectable ones.
+GIR_IDENTIFIER_PREFIX = Htmx
+GIR_SYMBOL_PREFIX     = htmx
+
 # Library names
 LIB_NAME        = libhtmx-glib-$(API_VERSION)
 LIB_SHARED      = $(OUTDIR)/$(LIB_NAME).so.$(VERSION)

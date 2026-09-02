@@ -144,27 +144,6 @@ parse_htmx_headers(SoupServerMessage *message)
 }
 
 /*
- * Parse HTTP method string to enum
- */
-static HtmxMethod
-parse_method(const gchar *method_str)
-{
-	if (g_ascii_strcasecmp(method_str, "GET") == 0) {
-		return HTMX_METHOD_GET;
-	} else if (g_ascii_strcasecmp(method_str, "POST") == 0) {
-		return HTMX_METHOD_POST;
-	} else if (g_ascii_strcasecmp(method_str, "PUT") == 0) {
-		return HTMX_METHOD_PUT;
-	} else if (g_ascii_strcasecmp(method_str, "PATCH") == 0) {
-		return HTMX_METHOD_PATCH;
-	} else if (g_ascii_strcasecmp(method_str, "DELETE") == 0) {
-		return HTMX_METHOD_DELETE;
-	}
-
-	return HTMX_METHOD_GET;
-}
-
-/*
  * Object finalization
  */
 static void
@@ -258,9 +237,20 @@ htmx_request_new_from_message(SoupServerMessage *message)
 	self = g_object_new(HTMX_TYPE_REQUEST, NULL);
 	self->message = g_object_ref(message);
 
-	/* Parse method */
+	/*
+	 * htmx_method_from_string(), which answers HTMX_METHOD_UNKNOWN for a
+	 * name it does not have.  There was a parse_method() here that
+	 * repeated the same five comparisons and ended `return
+	 * HTMX_METHOD_GET`, so `FROB /page` arrived at the router as a GET:
+	 * it matched GET routes, it was served static files, and
+	 * htmx_request_get_method() reported GET to everything downstream
+	 * with nothing to distinguish it from a real one.  The CSRF
+	 * middleware's fail-open was one consequence of that and was fixed
+	 * where the wait was, by reading the method string; this is the
+	 * value itself.
+	 */
 	method_str = soup_server_message_get_method(message);
-	self->method = parse_method(method_str);
+	self->method = htmx_method_from_string(method_str);
 
 	/* Parse URI */
 	uri = soup_server_message_get_uri(message);

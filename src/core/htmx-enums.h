@@ -21,15 +21,39 @@ G_BEGIN_DECLS
  * @HTMX_METHOD_PUT: HTTP PUT method
  * @HTMX_METHOD_PATCH: HTTP PATCH method
  * @HTMX_METHOD_DELETE: HTTP DELETE method
+ * @HTMX_METHOD_HEAD: HTTP HEAD method
+ * @HTMX_METHOD_UNKNOWN: a method this enum cannot name -- OPTIONS,
+ *   TRACE, a WebDAV verb, or something nobody has heard of
  *
  * HTTP methods supported by HTMX for AJAX requests.
+ *
+ * Both new members are appended rather than inserted, so every value a
+ * caller compiled against keeps the number it had.
+ *
+ * %HTMX_METHOD_UNKNOWN exists because the alternative was answering
+ * %HTMX_METHOD_GET: `FROB /page` then matched a route registered with
+ * htmx_router_get(), ran that handler and came back 200, and
+ * htmx_request_get_method() could not tell its caller a real GET from a
+ * string nobody recognised.  No route may be registered for it -- see
+ * htmx_router_add_route() -- so a request carrying it matches nothing
+ * and gets the 404 an unroutable request should get.
+ *
+ * %HTMX_METHOD_HEAD is named because it is the one method that reached
+ * a GET handler *correctly* through that fall-through, and dropping it
+ * into %HTMX_METHOD_UNKNOWN would have turned every HEAD into a 404
+ * while the fix was described as being about `FROB`.  RFC 9110 section
+ * 9.3.2 makes HEAD identical to GET but for the content, so
+ * htmx_router_match() matches it against GET routes and the static tree
+ * on purpose, and libsoup drops the body.
  */
 typedef enum {
 	HTMX_METHOD_GET = 0,
 	HTMX_METHOD_POST,
 	HTMX_METHOD_PUT,
 	HTMX_METHOD_PATCH,
-	HTMX_METHOD_DELETE
+	HTMX_METHOD_DELETE,
+	HTMX_METHOD_HEAD,
+	HTMX_METHOD_UNKNOWN
 } HtmxMethod;
 
 GType htmx_method_get_type(void) G_GNUC_CONST;
@@ -292,6 +316,11 @@ GType htmx_swap_modifier_get_type(void) G_GNUC_CONST;
  *
  * Converts an HTTP method enum to its string representation.
  *
+ * %HTMX_METHOD_UNKNOWN renders as "UNKNOWN", which is not a method any
+ * client sends and is not meant to be put on a wire.  It has an entry
+ * because the table is indexed by the enum value, so a member with no
+ * string in it is a read off the end of the array.
+ *
  * Returns: (transfer none): the method string (e.g., "GET", "POST")
  */
 const gchar *
@@ -303,7 +332,13 @@ htmx_method_to_string(HtmxMethod method);
  *
  * Converts a method string to its enum value.
  *
- * Returns: the corresponding #HtmxMethod, or -1 on error
+ * Returns %HTMX_METHOD_UNKNOWN for anything it does not recognise, and
+ * for @str being %NULL.  It returned -1, which is not a member of
+ * #HtmxMethod at all: a caller switching on the result was never warned
+ * about the case, and one comparing against %HTMX_METHOD_GET could not
+ * see it either.
+ *
+ * Returns: the corresponding #HtmxMethod, or %HTMX_METHOD_UNKNOWN
  */
 HtmxMethod
 htmx_method_from_string(const gchar *str);

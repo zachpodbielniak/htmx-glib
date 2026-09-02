@@ -14,11 +14,18 @@
  * invalidated it succeeded.
  *
  * The method half is the other way round from how it reads.
- * is_safe_method() named only HTMX_METHOD_GET, but HtmxMethod has no
- * HEAD and no OPTIONS at all and parse_method() answers HTMX_METHOD_GET
- * for every string it does not recognise -- so those two were already
- * safe, and so was every method nobody has heard of.  The decision was
- * being taken from a value that cannot represent the request.
+ * is_safe_method() named only HTMX_METHOD_GET, but HtmxMethod had no
+ * HEAD and has no OPTIONS, and the method parser answered
+ * HTMX_METHOD_GET for every string it did not recognise -- so those two
+ * were already safe, and so was every method nobody has heard of.  The
+ * decision was being taken from a value that cannot represent the
+ * request, and it is read off the SoupServerMessage now.
+ *
+ * The enum has since grown HTMX_METHOD_HEAD and HTMX_METHOD_UNKNOWN, so
+ * an unrecognised method no longer arrives here as a GET.  That does not
+ * move this decision back onto the enum: OPTIONS and TRACE are still
+ * safe and still have no member, which is why the safe set is four
+ * strings rather than a list of values.
  */
 
 #include <htmx-glib.h>
@@ -256,8 +263,17 @@ test_a_bad_token_is_still_refused(Fixture *fix, gconstpointer user_data)
 /*
  * HEAD, OPTIONS and TRACE are the safe methods RFC 9110 names alongside
  * GET, and they must not need a token.  They did not before either --
- * but only because parse_method() could not tell them apart from GET,
+ * but only because the method parser could not tell them apart from GET,
  * which is the same reason FROB below got through.
+ *
+ * "Needs no token" is a statement about this middleware, so it is asked
+ * of this middleware: a safe request is the one that reaches next(), so
+ * capture_token runs and the context carries a token.  This asserted
+ * `status == 200` for both, and for OPTIONS that was never a fact about
+ * CSRF -- it was the router matching a GET route because every
+ * unrecognised method parsed as HTMX_METHOD_GET.  With the enum able to
+ * say HTMX_METHOD_UNKNOWN, OPTIONS matches no route and the router
+ * answers 404, from a layer this test is not about.
  */
 static void
 test_the_other_safe_methods_need_no_token(Fixture *fix,
@@ -267,11 +283,19 @@ test_the_other_safe_methods_need_no_token(Fixture *fix,
 
 	request(fix, "GET", NULL);
 
+	/*
+	 * HEAD is named in the enum and matches GET routes on purpose, so it
+	 * still reaches the handler and is still a 200.
+	 */
+	g_clear_pointer(&fix->token, g_free);
 	request(fix, "HEAD", NULL);
 	g_assert_cmpuint(fix->status, ==, 200);
+	g_assert_nonnull(fix->token);
 
+	g_clear_pointer(&fix->token, g_free);
 	request(fix, "OPTIONS", NULL);
-	g_assert_cmpuint(fix->status, ==, 200);
+	g_assert_cmpuint(fix->status, !=, 403);
+	g_assert_nonnull(fix->token);
 }
 
 /*

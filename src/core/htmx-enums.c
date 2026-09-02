@@ -9,7 +9,11 @@
 #include <string.h>
 
 /*
- * Method enum strings
+ * Method enum strings, indexed by HtmxMethod -- so there is one entry
+ * per member and HTMX_METHOD_UNKNOWN needs its own or
+ * htmx_method_to_string() reads past the end of the array.  "UNKNOWN" is
+ * not an HTTP method and is never put on a wire; it is what a metrics
+ * label or a log line gets when the request named something else.
  */
 static const gchar *method_strings[] = {
 	"GET",
@@ -17,6 +21,8 @@ static const gchar *method_strings[] = {
 	"PUT",
 	"PATCH",
 	"DELETE",
+	"HEAD",
+	"UNKNOWN",
 	NULL
 };
 
@@ -88,6 +94,8 @@ htmx_method_get_type(void)
 			{ HTMX_METHOD_PUT, "HTMX_METHOD_PUT", "put" },
 			{ HTMX_METHOD_PATCH, "HTMX_METHOD_PATCH", "patch" },
 			{ HTMX_METHOD_DELETE, "HTMX_METHOD_DELETE", "delete" },
+			{ HTMX_METHOD_HEAD, "HTMX_METHOD_HEAD", "head" },
+			{ HTMX_METHOD_UNKNOWN, "HTMX_METHOD_UNKNOWN", "unknown" },
 			{ 0, NULL, NULL }
 		};
 		GType type_id = g_enum_register_static("HtmxMethod", values);
@@ -337,20 +345,31 @@ htmx_swap_modifier_get_type(void)
 const gchar *
 htmx_method_to_string(HtmxMethod method)
 {
-	g_return_val_if_fail(method >= HTMX_METHOD_GET && method <= HTMX_METHOD_DELETE, NULL);
+	g_return_val_if_fail(method >= HTMX_METHOD_GET && method <= HTMX_METHOD_UNKNOWN, NULL);
 
 	return method_strings[method];
 }
 
 /*
- * Convert string to HtmxMethod
+ * Convert string to HtmxMethod.
+ *
+ * This is the one string-to-method mapping in the library.
+ * htmx_request_new_from_message() had a second, hand-written one --
+ * parse_method() -- which listed the same five names and ended in
+ * `return HTMX_METHOD_GET`, so the two copies disagreed about exactly
+ * the case that matters.
+ *
+ * An unrecognised name is HTMX_METHOD_UNKNOWN, not -1: -1 is not a
+ * member of the enum, so nothing that switches over the type is told
+ * about it and a caller has to know to check for a value the header's
+ * own list does not contain.
  */
 HtmxMethod
 htmx_method_from_string(const gchar *str)
 {
 	gint i;
 
-	g_return_val_if_fail(str != NULL, -1);
+	g_return_val_if_fail(str != NULL, HTMX_METHOD_UNKNOWN);
 
 	for (i = 0; method_strings[i] != NULL; i++) {
 		if (g_ascii_strcasecmp(str, method_strings[i]) == 0) {
@@ -358,7 +377,7 @@ htmx_method_from_string(const gchar *str)
 		}
 	}
 
-	return (HtmxMethod)-1;
+	return HTMX_METHOD_UNKNOWN;
 }
 
 /*

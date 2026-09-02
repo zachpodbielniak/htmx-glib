@@ -240,7 +240,9 @@ $(GIR_FILE): $(LIB_SHARED) $(ALL_HEADERS) $(ALL_SOURCES) | $(OUTDIR)
 	$(Q)$(G_IR_SCANNER) \
 		--namespace=$(GIR_NAMESPACE) \
 		--nsversion=$(GIR_VERSION) \
-		--library=$(LIB_NAME) \
+		--identifier-prefix=$(GIR_IDENTIFIER_PREFIX) \
+		--symbol-prefix=$(GIR_SYMBOL_PREFIX) \
+		--library=$(GIR_LIBRARY) \
 		--library-path=$(OUTDIR) \
 		--include=GLib-2.0 \
 		--include=GObject-2.0 \

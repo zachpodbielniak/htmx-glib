@@ -181,6 +181,15 @@ htmx_router_add_route(
 	g_return_if_fail(pattern != NULL);
 	g_return_if_fail(callback != NULL);
 
+	/*
+	 * HTMX_METHOD_UNKNOWN is what every unrecognised method parses to,
+	 * so a route registered for it is a route every unrecognised method
+	 * reaches at once -- the thing appending the member was meant to
+	 * stop, rebuilt one call up.  Refused here rather than filtered in
+	 * htmx_router_match(), so the caller hears about it.
+	 */
+	g_return_if_fail(method != HTMX_METHOD_UNKNOWN);
+
 	route = route_new(method, pattern, callback, user_data);
 	if (route != NULL) {
 		self->routes = g_list_append(self->routes, route);
@@ -273,6 +282,33 @@ htmx_router_serve_static(
  * turning a request into a filename.  Measured against libsoup 3.6.6:
  * every traversal form tried was already stopped before this code ran.
  */
+
+/*
+ * Whether a request made with @request_method should be answered by a
+ * route registered for @route_method.
+ *
+ * The only asymmetry is HEAD, which RFC 9110 section 9.3.2 defines as
+ * identical to GET but for the content -- libsoup drops the body on the
+ * way out, so a GET route answering a HEAD is the correct thing and not
+ * a leak.  It was already the behaviour, arrived at by accident: the
+ * method parser answered HTMX_METHOD_GET for every name it did not know,
+ * so HEAD matched GET routes for the same reason FROB did.  Naming HEAD
+ * keeps the half of that which was right.
+ *
+ * HTMX_METHOD_UNKNOWN matches nothing, including itself -- a route
+ * cannot be registered for it, so the equality below can never be
+ * reached with it on both sides.
+ */
+static gboolean
+route_method_matches(HtmxMethod route_method, HtmxMethod request_method)
+{
+	if (route_method == request_method) {
+		return TRUE;
+	}
+
+	return route_method == HTMX_METHOD_GET &&
+	       request_method == HTMX_METHOD_HEAD;
+}
 
 /*
  * Try to serve a static file
@@ -383,7 +419,7 @@ htmx_router_match(
 		Route *route = (Route *)l->data;
 		GMatchInfo *match_info;
 
-		if (route->method != method) {
+		if (!route_method_matches(route->method, method)) {
 			continue;
 		}
 
@@ -406,8 +442,12 @@ htmx_router_match(
 		g_match_info_free(match_info);
 	}
 
-	/* Try static routes */
-	if (method == HTMX_METHOD_GET) {
+	/*
+	 * Try static routes.  The same GET-or-HEAD question as above, asked
+	 * of the same function: this gate was a bare `== HTMX_METHOD_GET`,
+	 * so every unrecognised method was handed the file too.
+	 */
+	if (route_method_matches(HTMX_METHOD_GET, method)) {
 		response = try_serve_static(self, path);
 		if (response != NULL) {
 			return response;
