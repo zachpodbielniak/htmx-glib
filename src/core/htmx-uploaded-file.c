@@ -319,6 +319,16 @@ htmx_uploaded_file_parse_multipart(const gchar  *content_type,
 		gchar *filename;
 		gchar *part_content_type;
 
+		/*
+		 * Both of these read pos[1], so both need a byte to read.
+		 * The loop condition only guarantees pos[0], so a body
+		 * ending one byte past the final delimiter -- on a '\r' or
+		 * a '-' -- read one past the allocation.  Fifty-six
+		 * attacker-controlled bytes, on a request body.
+		 */
+		if (pos + 1 >= body_str + body_len)
+			break;
+
 		/* Skip CRLF after delimiter */
 		if (pos[0] == '\r' && pos[1] == '\n')
 			pos += 2;

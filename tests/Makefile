@@ -9,7 +9,7 @@ TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-builder test-elements test-document \
         test-sync test-handler test-upload test-compression \
         test-validation-group test-validator test-metrics test-streaming \
-        test-response-bytes
+        test-response-bytes test-serve-static
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -28,6 +28,10 @@ test-streaming: test-streaming.c
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-response-bytes: test-response-bytes.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-serve-static: test-serve-static.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 

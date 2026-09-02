@@ -169,8 +169,16 @@ htmx_rate_limiter_middleware(
 		htmx_response_set_content(response, "Rate limit exceeded");
 		htmx_response_set_content_type(response, "text/plain");
 		htmx_response_add_header(response, "Retry-After", "60");
+		/*
+		 * No unref: htmx_context_set_response() is (transfer full)
+		 * and its body assigns without taking a reference, so the
+		 * unref that used to be here dropped the only one.  The
+		 * context kept the dangling pointer, htmx_server.c read it
+		 * back to apply it, and dispose freed it a second time --
+		 * every request that tripped the limit.  The other three
+		 * call sites do not unref.
+		 */
 		htmx_context_set_response(context, response);
-		g_object_unref(response);
 		return;
 	}
 

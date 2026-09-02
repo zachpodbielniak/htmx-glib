@@ -318,7 +318,26 @@ test_static_stays_inside_its_directory(void)
 		response = htmx_router_match(router, good, &params);
 		g_assert_nonnull(response);
 		g_assert_cmpuint(htmx_response_get_status(response), ==, 200);
-		g_assert_cmpstr(htmx_response_get_content(response), ==, "asset");
+
+		/*
+		 * Bytes, not content.  A static route serves a file, and a
+		 * file is not a string: reading it into a NUL-terminated
+		 * one truncated every binary asset at its first zero byte,
+		 * eight in for a PNG, beside a MIME table naming image/png.
+		 * This assertion is what said the old behaviour was
+		 * intended, and it only ever served text.
+		 */
+		{
+			GBytes *body = htmx_response_get_bytes(response);
+			gsize size = 0;
+			const gchar *data;
+
+			g_assert_nonnull(body);
+			data = g_bytes_get_data(body, &size);
+			g_assert_cmpuint(size, ==, strlen("asset"));
+			g_assert_cmpint(memcmp(data, "asset", size), ==, 0);
+		}
+
 		g_object_unref(response);
 		g_clear_pointer(&params, g_hash_table_unref);
 	}

@@ -355,7 +355,24 @@ try_serve_static(HtmxRouter *self, const gchar *path)
 					mime_type = "image/svg+xml";
 				}
 
-				response = htmx_response_new_with_content(content);
+				/*
+				 * Bytes, not a string.  This called
+				 * htmx_response_new_with_content(), which
+				 * g_strdup()s and is written out with
+				 * strlen() -- so every binary file was
+				 * truncated at its first NUL, which for a
+				 * PNG is eight bytes in.  The length was
+				 * read from g_file_get_contents() and
+				 * thrown away, beside a MIME table that
+				 * names image/png, image/jpeg and
+				 * image/svg+xml.
+				 */
+				response = htmx_response_new();
+				htmx_response_set_bytes(
+					response,
+					g_bytes_new_take(
+						g_steal_pointer(&content),
+						length));
 				htmx_response_set_content_type(response, mime_type);
 				return response;
 			}

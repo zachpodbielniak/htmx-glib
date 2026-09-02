@@ -356,6 +356,53 @@ test_multipart_parse_binary_payload(void)
 	g_bytes_unref(body);
 }
 
+/*
+ * A body that ends one byte past the final delimiter.
+ *
+ * The part loop guarded `pos < body_str + body_len` and then read
+ * pos[1] twice -- in the CRLF skip and in the end-delimiter check -- so
+ * a body whose last byte is '\r' or '-' read one past the allocation.
+ * Fifty-six attacker-controlled bytes, on a request body, and clawtilla
+ * calls this parser on two upload routes.
+ *
+ * The over-read does not change the answer, so this asserts only that
+ * the parse completes: the failure is visible to ASan, which is where
+ * it is worth running (`make ASAN=1`).  Using g_bytes_new() rather than
+ * a static literal is deliberate -- the byte after a string literal is
+ * inside the binary and the over-read would be invisible there, which
+ * is exactly how the other multipart tests missed it.
+ */
+static void
+test_multipart_body_ending_at_the_delimiter(void)
+{
+	const gchar *cases[] = {
+		"--B\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\nv\r\n--B\r",
+		"--B\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\nv\r\n--B-",
+		"--B\r",
+		"--B-"
+	};
+	gsize i;
+
+	for (i = 0; i < G_N_ELEMENTS(cases); i++) {
+		GError *error = NULL;
+		GHashTable *form_data = NULL;
+		GPtrArray *files;
+		gsize length = strlen(cases[i]);
+		/* Heap, exactly this long, with nothing readable after it. */
+		GBytes *body = g_bytes_new(cases[i], length);
+
+		files = htmx_uploaded_file_parse_multipart(
+			"multipart/form-data; boundary=B",
+			body, &form_data, &error);
+
+		/* Whatever it decides, it must not read past the body. */
+		g_clear_error(&error);
+		g_clear_pointer(&files, g_ptr_array_unref);
+		g_clear_pointer(&form_data, g_hash_table_unref);
+		g_bytes_unref(body);
+	}
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -373,6 +420,8 @@ main(int argc, char *argv[])
 	g_test_add_func("/upload/multipart/no_boundary", test_multipart_parse_no_boundary);
 	g_test_add_func("/upload/multipart/only_fields", test_multipart_parse_only_fields);
 	g_test_add_func("/upload/multipart/binary_payload", test_multipart_parse_binary_payload);
+	g_test_add_func("/upload/multipart/body_ends_at_delimiter",
+	                test_multipart_body_ending_at_the_delimiter);
 
 	return g_test_run();
 }
