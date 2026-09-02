@@ -37,6 +37,8 @@ include config.mk
 CORE_SOURCES = \
 	$(COREDIR)/htmx-enums.c \
 	$(COREDIR)/htmx-error.c \
+	$(COREDIR)/htmx-path.c \
+	$(COREDIR)/htmx-secret.c \
 	$(COREDIR)/htmx-config.c \
 	$(COREDIR)/htmx-request.c \
 	$(COREDIR)/htmx-response.c \
@@ -115,6 +117,7 @@ CORE_HEADERS = \
 	$(COREDIR)/htmx-context.h \
 	$(COREDIR)/htmx-middleware.h \
 	$(COREDIR)/htmx-cookie.h \
+	$(COREDIR)/htmx-secret.h \
 	$(COREDIR)/htmx-session.h \
 	$(COREDIR)/htmx-csrf.h \
 	$(COREDIR)/htmx-validator.h \

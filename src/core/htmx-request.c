@@ -28,13 +28,24 @@ struct _HtmxRequest {
 G_DEFINE_FINAL_TYPE(HtmxRequest, htmx_request, G_TYPE_OBJECT)
 
 /*
- * Parse query string into hash table
+ * Parse an application/x-www-form-urlencoded string into a hash table.
+ *
+ * Both readers come here: a URL's query string and a POST body in that
+ * media type are the same encoding, and the difference between them is
+ * where they arrive, not how they are written.  The '+' substitution
+ * below used to live in a separate parse_form_data() that wrapped this
+ * function, so a GET form and an hx-get -- which produce exactly this
+ * encoding in the query -- came back with literal '+' characters where
+ * the spaces were, while the same form submitted as a POST came back
+ * correct.  Two spellings of one rule, and only one of them had it.
  */
 static GHashTable *
 parse_query_string(const gchar *query)
 {
 	GHashTable *params;
+	g_autofree gchar *decoded = NULL;
 	g_auto(GStrv) pairs = NULL;
+	gchar *p;
 	gint i;
 
 	params = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -43,7 +54,23 @@ parse_query_string(const gchar *query)
 		return params;
 	}
 
-	pairs = g_strsplit(query, "&", -1);
+	/*
+	 * In this encoding a '+' means a space.  Substituted BEFORE the %XX
+	 * unescaping below, so a genuine plus sent as %2B still decodes to
+	 * '+' rather than being turned into a space -- the other order
+	 * cannot tell the two apart, because by then they are both '+'.
+	 *
+	 * Whole-string rather than per-field: neither separator this is
+	 * split on, '&' or '=', can be a '+'.
+	 */
+	decoded = g_strdup(query);
+	for (p = decoded; *p != '\0'; p++) {
+		if (*p == '+') {
+			*p = ' ';
+		}
+	}
+
+	pairs = g_strsplit(decoded, "&", -1);
 	for (i = 0; pairs[i] != NULL; i++) {
 		gchar *eq;
 		gchar *key;
@@ -66,37 +93,6 @@ parse_query_string(const gchar *query)
 	}
 
 	return params;
-}
-
-/*
- * Parse form data (application/x-www-form-urlencoded)
- */
-static GHashTable *
-parse_form_data(const gchar *body)
-{
-	g_autofree gchar *decoded = NULL;
-	gchar *p;
-
-	if (body == NULL)
-		return parse_query_string(NULL);
-
-	/*
-	 * In application/x-www-form-urlencoded a '+' means a space.
-	 * parse_query_string() only handles %XX, so without this every
-	 * form field containing a space came back with literal '+'
-	 * characters -- "yes, after the backup" arriving as
-	 * "yes,+after+the+backup".
-	 *
-	 * Substituted BEFORE unescaping, so a genuine plus sent as %2B
-	 * still decodes to '+' rather than being turned into a space.
-	 */
-	decoded = g_strdup(body);
-	for (p = decoded; *p != '\0'; p++) {
-		if (*p == '+')
-			*p = ' ';
-	}
-
-	return parse_query_string(decoded);
 }
 
 /*
@@ -296,7 +292,14 @@ htmx_request_new_from_message(SoupServerMessage *message)
 		/* Parse form data if applicable */
 		if (self->content_type != NULL &&
 		    g_str_has_prefix(self->content_type, "application/x-www-form-urlencoded")) {
-			self->form_data = parse_form_data(self->body);
+			/*
+			 * The same reader as the query string, because it is
+			 * the same encoding.  There was a parse_form_data()
+			 * here that differed from it by one substitution,
+			 * which is how the query string came to be missing
+			 * that substitution.
+			 */
+			self->form_data = parse_query_string(self->body);
 		} else {
 			self->form_data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 		}

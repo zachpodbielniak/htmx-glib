@@ -41,6 +41,7 @@ G_BEGIN_DECLS
 #include "core/htmx-context.h"
 #include "core/htmx-middleware.h"
 #include "core/htmx-cookie.h"
+#include "core/htmx-secret.h"
 #include "core/htmx-session.h"
 #include "core/htmx-csrf.h"
 #include "core/htmx-validator.h"

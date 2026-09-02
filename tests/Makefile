@@ -9,7 +9,8 @@ TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-builder test-elements test-document \
         test-sync test-handler test-upload test-compression \
         test-validation-group test-validator test-metrics test-streaming \
-        test-response-bytes test-serve-static
+        test-response-bytes test-serve-static test-template-engine \
+        test-secret test-csrf test-session test-request
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -32,6 +33,26 @@ test-response-bytes: test-response-bytes.c
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-serve-static: test-serve-static.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-template-engine: test-template-engine.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-secret: test-secret.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-csrf: test-csrf.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-session: test-session.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-request: test-request.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 

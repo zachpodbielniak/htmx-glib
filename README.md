@@ -10,6 +10,7 @@ A GObject-based C library for building [HTMX](https://htmx.org)-powered web appl
 - **Routing** — `HtmxRouter` + `HtmxHandler` for matching HTMX requests to handlers
 - **Extensions** — SSE and WebSocket support via `HtmxSse`, `HtmxWebSocket`
 - **Middleware stack** — Pluggable `HtmxMiddleware` for auth, CSRF, rate limiting, i18n, sessions
+- **Secrets from the kernel** — `htmx_secret_new_hex()` / `htmx_secret_equals()` for session ids, CSRF tokens and anything else that must not be predictable
 - **GObject Introspection** — Full `.gir` / `.typelib` for use from Python, Lua, JavaScript, etc.
 - **gnu89 C** — No C99+, no C++ — clean, portable, embeddable
 

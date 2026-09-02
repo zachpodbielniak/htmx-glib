@@ -6,8 +6,15 @@
  *
  * HtmxCsrf provides Cross-Site Request Forgery protection via
  * token-based validation. Tokens are stored in the session and
- * validated against a request header or form field on unsafe
- * HTTP methods (POST, PUT, PATCH, DELETE).
+ * validated against a request header or form field on any method that
+ * is not one of the safe ones (GET, HEAD, OPTIONS, TRACE).
+ *
+ * There is one token per session, and it lives as long as the session
+ * does. That is not a shortcut: a page renders the token into a form and
+ * submits it later, and anything that replaces the token in between --
+ * including another request from the same page -- turns that submit into
+ * a 403. Rotation is htmx_csrf_generate_token(), for the application to
+ * call when the identity behind the session changes.
  *
  * Requires session middleware to be registered BEFORE CSRF middleware.
  *
@@ -78,7 +85,14 @@ htmx_csrf_set_form_field(HtmxCsrf *self, const gchar *field);
  * @self: an #HtmxCsrf
  * @session_id: the session to store the token in
  *
- * Generates a new CSRF token and stores it in the session.
+ * Generates a new CSRF token from the kernel's entropy and stores it in
+ * the session, **replacing** whatever token was there.
+ *
+ * There is one slot per session, so this invalidates the token in every
+ * page that session already has open. Call it when the identity behind
+ * the session changes -- a login, a privilege change -- and not
+ * otherwise. htmx_csrf_middleware() does not call it per request; it did,
+ * and a page's own second request was enough to break its form.
  *
  * Returns: (transfer none): the generated token
  */
@@ -110,9 +124,16 @@ htmx_csrf_validate_token(
  * @user_data: (type HtmxCsrf): the CSRF protector
  *
  * Middleware function for CSRF protection.
- * For safe methods (GET): generates a token and stores it on the context.
- * For unsafe methods (POST, PUT, PATCH, DELETE): validates the token
- * from the X-CSRF-Token header or _csrf form field.
+ *
+ * For the safe methods (GET, HEAD, OPTIONS, TRACE): puts the session's
+ * token on the context, minting one only if the session has none. For
+ * every other method, including one this library has no #HtmxMethod for:
+ * validates the token from the X-CSRF-Token header or the _csrf form
+ * field, and leaves it in place afterwards.
+ *
+ * The method is read from the request's own method string rather than
+ * from #HtmxMethod, which cannot represent HEAD, OPTIONS or anything
+ * else outside its five members.
  *
  * On validation failure, sets a 403 Forbidden response.
  *

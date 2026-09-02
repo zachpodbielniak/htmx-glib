@@ -202,6 +202,114 @@ htmx_server_listen_on(server, "100.84.12.7", 8790, &error);
 uris = htmx_server_get_listen_uris(server);
 ```
 
+## Anything unguessable comes from the kernel
+
+`htmx_secret_new_hex()` in `core/htmx-secret.h`, and `htmx_secret_equals()`
+to compare.  Never `g_uuid_string_random()` and never `g_random_*` for a
+value somebody must not be able to predict: those are a pure function of
+GLib's global `GRand`, a Mersenne Twister whose 624-word state is
+recoverable from a few hundred consecutive outputs.
+
+Session ids and CSRF tokens were both minted that way, and both are handed
+to whoever asks for a page -- the session id in a `Set-Cookie`, the CSRF
+token in the form -- so an attacker collects the generator's output by
+loading pages and then computes everybody else's.  Nothing about the values
+looks wrong; the generator is the whole defect, which is why the test for
+it reseeds `g_random_set_seed()` and asserts the value does *not* repeat
+rather than measuring how random it looks.
+
+A UUID is still right for a filename or a correlation id.  The question is
+whether guessing it gets anybody anything.
+
+`htmx_secret_new_hex()` has no userspace fallback and aborts if neither
+`getrandom(2)` nor `/dev/urandom` will answer.  A predictable session id is
+not a degraded session id, it is somebody else's session, and it would be
+indistinguishable from a working one from the outside.
+
+## Sessions and CSRF
+
+**`Set-Cookie` is emitted with `htmx_response_append_header()`.**
+`htmx_response_add_header()` inserts into a hash table keyed by name, so
+the last writer wins -- right for `Content-Type`, wrong for the one header
+in HTTP whose design is that there is more than one of it.  The session
+middleware runs after the handler on the way out, so through `add_header()`
+it silently replaced any cookie the handler had set.
+
+**There is one CSRF token per session and it does not rotate per request.**
+A page renders the token into a form and submits it later, so anything that
+replaces the token in between turns that submit into a 403 -- and a page
+makes more than one request: a favicon, a stylesheet through the same
+middleware stack, an `hx-get` that fills a panel, a second tab.
+`htmx_csrf_middleware()` called `htmx_csrf_generate_token()` on every safe
+request and did exactly that.  `htmx_csrf_generate_token()` still means
+"mint a new one", for the application to call when the identity behind the
+session changes.
+
+**Method safety is read from the request's method string, not from
+`HtmxMethod`.** That enum has five members -- GET, POST, PUT, PATCH,
+DELETE -- and `parse_method()` answers `HTMX_METHOD_GET` for every string
+that is not one of them.  So `method == HTMX_METHOD_GET` was not a test for
+GET: HEAD and OPTIONS passed it, which is right, and so did `FROB`,
+`PROPFIND` and anything else at all, which is a fail-open in the function
+whose answer decides whether a credential is required.  The safe methods
+are the four of RFC 9110 §9.2.1: GET, HEAD, OPTIONS, TRACE.
+
+## A name that becomes a filename
+
+Two places turn an outside name into a filename and read it:
+`htmx_router_serve_static()` and the template engine's `load_template()`.
+Both go through `htmx_path_is_inside()` (`core/htmx-path.h`), which
+compares canonical paths and requires the separator after the root, so
+`/srv/static-secrets` does not count as inside `/srv/static`.
+
+The check used to be a static function beside the router, which made it a
+rule about that one caller: a template name -- from
+`htmx_template_engine_render(self, name, ...)` or from a `{{> name}}`
+inside a template -- was joined with `g_build_filename()` and read, so
+`../../etc/passwd` worked.
+
+What it does not catch: `g_canonicalize_filename()` is lexical, so a
+symlink inside the root pointing out of it is inside as far as this
+function is concerned.  Resolving those needs the file to exist, which is
+not true of every path a caller wants to check.
+
+## `@error` is optional, so `*error` is not a pointer you have
+
+`(out) (optional)` on a `GError **` means `NULL` is a legal thing to pass,
+and every branch that wants to ask "did that fail?" needs a `GError *local`
+plus `g_propagate_error()`.  `render_template_string()` read `*error`
+unconditionally and segfaulted on a template naming a partial that is not
+there.
+
+## Compression
+
+The compressed body is applied with `htmx_response_set_bytes()`.  It was
+`htmx_response_set_content()`, which `g_strdup()`s and is written out with
+`strlen()` -- and a gzip stream's third byte is zero, so every compressed
+response was a three-byte body under a `Content-Encoding: gzip` promising
+the rest.
+
+The compression loop ends on `G_CONVERTER_FINISHED` and on nothing else.
+"All the input has been consumed" is a different question: a deflate stream
+is not finished until its final block, and a gzip stream is not finished
+until the trailer after that.  A body zlib swallows in one pass -- a
+megabyte of ordinary HTML does -- came out a few hundred bytes short of
+right and decompressed to an error.  A length check cannot see it; the test
+decompresses.
+
+## One reader for `application/x-www-form-urlencoded`
+
+`parse_query_string()` in `htmx-request.c` handles a URL's query string and
+a POST body alike, because they are the same encoding and differ only in
+where they arrive.  There was a separate `parse_form_data()` that wrapped
+it and added the `+`-means-space substitution, so a GET form and an
+`hx-get` came back with literal `+` characters where the spaces were while
+the same form as a POST came back correct.
+
+The substitution happens **before** the `%XX` unescaping, so a genuine plus
+sent as `%2B` still decodes to `+`.  The other order cannot tell the two
+apart, because by then they are both `+`.
+
 ## Testing a route without a server
 
 `htmx_request_new_for_path()` builds a request with no `SoupServerMessage`

@@ -6,6 +6,7 @@
  */
 
 #include "htmx-router.h"
+#include "htmx-path.h"
 #include <string.h>
 #include <gio/gio.h>
 
@@ -256,12 +257,14 @@ htmx_router_serve_static(
 }
 
 /*
- * Whether @path, once every "..", "." and symlink is resolved, is still
- * inside @root.
+ * Whether @path, once every ".." and "." is resolved, is still inside
+ * @root -- htmx_path_is_inside(), which the template engine also uses.
  *
- * The check is on the canonical path rather than on the text, because a
- * symlink pointing out of the tree is only visible from the far end and
- * a textual scan for ".." cannot see one at all.
+ * It lived here as a static function, which is why load_template() went
+ * without it for as long as it did: the check was a property of this
+ * call site rather than of the operation both perform.  Its own limit is
+ * stated where it is now defined -- the canonicalisation is lexical, so
+ * a symlink out of the tree is not what it catches.
  *
  * Nothing has reached this with a traversal in it -- libsoup normalises a
  * literal "../" out of the request path and answers an encoded one with
@@ -270,36 +273,6 @@ htmx_router_serve_static(
  * turning a request into a filename.  Measured against libsoup 3.6.6:
  * every traversal form tried was already stopped before this code ran.
  */
-static gboolean
-path_is_inside(const gchar *root, const gchar *path)
-{
-	g_autofree gchar *real_root = NULL;
-	g_autofree gchar *real_path = NULL;
-	gsize root_length;
-
-	real_root = g_canonicalize_filename(root, NULL);
-	real_path = g_canonicalize_filename(path, NULL);
-
-	if (real_root == NULL || real_path == NULL) {
-		return FALSE;
-	}
-
-	if (g_strcmp0(real_root, real_path) == 0) {
-		return TRUE;
-	}
-
-	root_length = strlen(real_root);
-
-	/*
-	 * The separator matters. Without it "/srv/static-secrets" counts as
-	 * inside "/srv/static", which is a prefix and not a parent.
-	 */
-	if (strncmp(real_path, real_root, root_length) != 0) {
-		return FALSE;
-	}
-
-	return real_path[root_length] == G_DIR_SEPARATOR;
-}
 
 /*
  * Try to serve a static file
@@ -327,7 +300,7 @@ try_serve_static(HtmxRouter *self, const gchar *path)
 
 			full_path = g_build_filename(route->directory, rel, NULL);
 
-			if (!path_is_inside(route->directory, full_path)) {
+			if (!htmx_path_is_inside(route->directory, full_path)) {
 				g_warning("htmx: refusing %s: outside %s",
 				          path, route->directory);
 				return htmx_response_not_found();

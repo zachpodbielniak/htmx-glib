@@ -7,6 +7,7 @@
 
 #include "htmx-template-engine.h"
 #include "htmx-error.h"
+#include "htmx-path.h"
 #include <string.h>
 
 struct _HtmxTemplateEngine {
@@ -93,6 +94,19 @@ htmx_template_engine_add_partial(HtmxTemplateEngine *self,
 
 /*
  * Load a template file from the search paths.
+ *
+ * @name is joined to each search directory and read.  It arrives from
+ * htmx_template_engine_render(self, name, ...) and from the {{> name}}
+ * inside a template, so it is not necessarily a name the application
+ * wrote: "../../etc/passwd" was joined and read like any other, because
+ * g_build_filename() joins whatever it is given and g_file_get_contents()
+ * does not care where the file is.
+ *
+ * htmx_router_serve_static() -- the other place in this library that
+ * turns an outside name into a filename -- has always refused a path that
+ * leaves its directory.  The check was a static function beside that one
+ * caller, so it was a rule about that caller rather than about the
+ * operation.  It is htmx_path_is_inside() now, and both go through it.
  */
 static gchar *
 load_template(HtmxTemplateEngine *self, const gchar *name, GError **error)
@@ -113,6 +127,17 @@ load_template(HtmxTemplateEngine *self, const gchar *name, GError **error)
 		const gchar *dir = (const gchar *)g_ptr_array_index(
 			self->search_paths, i);
 		g_autofree gchar *path = g_build_filename(dir, name, NULL);
+
+		/*
+		 * Refused rather than skipped-and-tried-elsewhere: a name
+		 * that climbs out of one search directory climbs out of
+		 * every one, so a quiet "not found" would hide the attempt.
+		 */
+		if (!htmx_path_is_inside(dir, path)) {
+			g_warning("htmx: refusing template %s: outside %s",
+			          name, dir);
+			continue;
+		}
 
 		if (g_file_get_contents(path, &content, NULL, NULL)) {
 			if (self->cache_enabled) {
@@ -256,6 +281,18 @@ render_template_string(HtmxTemplateEngine *self,
 					const gchar *partial_name = tag + 2;
 					const gchar *partial_content;
 					g_autofree gchar *rendered = NULL;
+					/*
+					 * A local, because this branch has
+					 * to ask whether the partial failed
+					 * and @error is annotated (out)
+					 * (optional).  It read *error
+					 * unconditionally, so a caller that
+					 * passed NULL -- which the header
+					 * says is legal -- got a segfault
+					 * out of a template naming a partial
+					 * that is not there.
+					 */
+					GError *local = NULL;
 
 					/* Check registered partials first */
 					partial_content = (const gchar *)
@@ -267,14 +304,14 @@ render_template_string(HtmxTemplateEngine *self,
 						rendered = render_template_string(
 							self, partial_content,
 							context, depth + 1,
-							error);
+							&local);
 					} else {
 						/* Try loading from file */
 						g_autofree gchar *loaded = NULL;
 
 						loaded = load_template(
 							self, partial_name,
-							error);
+							&local);
 						if (loaded != NULL) {
 							rendered =
 								render_template_string(
@@ -282,14 +319,16 @@ render_template_string(HtmxTemplateEngine *self,
 									loaded,
 									context,
 									depth + 1,
-									error);
+									&local);
 						}
 					}
 
 					if (rendered != NULL) {
 						g_string_append(result,
 						                rendered);
-					} else if (*error != NULL) {
+						g_clear_error(&local);
+					} else if (local != NULL) {
+						g_propagate_error(error, local);
 						g_string_free(result, TRUE);
 						return NULL;
 					}

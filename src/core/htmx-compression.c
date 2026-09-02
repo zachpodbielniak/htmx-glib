@@ -77,6 +77,22 @@ accepts_encoding(HtmxRequest *request, const gchar *encoding)
 /*
  * Compress data using GZlibCompressor (gzip or deflate).
  * Returns NULL on failure.
+ *
+ * The loop ends on G_CONVERTER_FINISHED and on nothing else.  It used to
+ * run `while (total_read < data_len)` and take the input being consumed
+ * as the work being done, which is a different question: a deflate stream
+ * is not finished until the converter has emitted its final block, and a
+ * gzip stream is not finished until the eight-byte trailer after that.
+ *
+ * The old G_CONVERTER_INPUT_AT_END flag was chosen by
+ * `total_read + sizeof(out_buf) >= data_len`, which compares input
+ * consumed plus the *output* buffer's size against the input's length.
+ * For a body larger than 64 KB the first pass was therefore told the
+ * input had not ended -- and a body that compresses well is swallowed
+ * whole on that pass, so the loop exited immediately with an unterminated
+ * stream.  A megabyte of ordinary HTML does this, and the result is
+ * within a few hundred bytes of the right length, so it survives every
+ * check but decompressing it.
  */
 static GBytes *
 compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
@@ -98,12 +114,21 @@ compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
 	output = g_byte_array_new();
 	total_read = 0;
 
-	while (total_read < data_len) {
+	for (;;) {
+		/*
+		 * Told the input has ended only once it actually has, which
+		 * is what makes the flush pass -- zero bytes in, the trailer
+		 * out -- reachable at all.
+		 */
+		GConverterFlags flags = (total_read == data_len)
+			? G_CONVERTER_INPUT_AT_END
+			: G_CONVERTER_NO_FLAGS;
+
 		result = g_converter_convert(
 			converter,
 			data + total_read, data_len - total_read,
 			out_buf, sizeof(out_buf),
-			(total_read + sizeof(out_buf) >= data_len) ? G_CONVERTER_INPUT_AT_END : G_CONVERTER_NO_FLAGS,
+			flags,
 			&bytes_read, &bytes_written,
 			&error);
 
@@ -125,6 +150,22 @@ compress_data(const gchar *data, gsize data_len, gboolean use_gzip)
 
 		if (result == G_CONVERTER_FINISHED)
 			break;
+
+		/*
+		 * A pass that neither consumed nor produced anything cannot
+		 * be followed by one that does, and this loop no longer has
+		 * an input-length bound to fall out of.  Refuse rather than
+		 * spin: a compressor that has stopped answering is not a body
+		 * to send.
+		 */
+		if (bytes_read == 0 && bytes_written == 0) {
+			g_warning("Compression stalled after %" G_GSIZE_FORMAT
+			          " of %" G_GSIZE_FORMAT " bytes",
+			          total_read, data_len);
+			g_byte_array_unref(output);
+			g_object_unref(compressor);
+			return NULL;
+		}
 	}
 
 	g_object_unref(compressor);
@@ -149,9 +190,7 @@ htmx_compression_middleware(HtmxContext        *context,
 	gsize content_len;
 	gboolean use_gzip;
 	GBytes *compressed;
-	gchar *compressed_content;
 	gsize compressed_len;
-	const guint8 *compressed_data;
 
 	/* Run the rest of the pipeline first */
 	next(context, next_data);
@@ -182,7 +221,7 @@ htmx_compression_middleware(HtmxContext        *context,
 	if (compressed == NULL)
 		return;
 
-	compressed_data = g_bytes_get_data(compressed, &compressed_len);
+	g_bytes_get_data(compressed, &compressed_len);
 
 	/* Only use compressed version if it's actually smaller */
 	if (compressed_len >= content_len) {
@@ -191,22 +230,36 @@ htmx_compression_middleware(HtmxContext        *context,
 	}
 
 	/*
-	 * Set the compressed content. We store as a NUL-terminated copy
-	 * since HtmxResponse uses gchar* content. For binary compressed
-	 * data this is imperfect but functional for the middleware's
-	 * purpose of setting headers. The actual compressed bytes should
-	 * be applied directly to the SoupServerMessage in a real
-	 * integration, which the server does.
+	 * Bytes, not content.
+	 *
+	 * This stored the compressed body with htmx_response_set_content(),
+	 * which g_strdup()s it and is written out with strlen() -- and a
+	 * gzip stream's third byte is the deflate compression method, which
+	 * is zero.  So every compressed response was a three-byte body under
+	 * a Content-Encoding: gzip promising the rest, and a deflate one was
+	 * cut at whatever offset its first zero byte happened to land on.
+	 *
+	 * The comment that used to stand here said the real bytes were
+	 * applied to the SoupServerMessage by the server "in a real
+	 * integration, which the server does".  htmx-server.c has never
+	 * mentioned compression; htmx_response_set_bytes() is what applies a
+	 * body that is not a string, and htmx_response_apply() prefers it
+	 * over content for exactly this reason.
 	 */
-	compressed_content = g_malloc(compressed_len + 1);
-	memcpy(compressed_content, compressed_data, compressed_len);
-	compressed_content[compressed_len] = '\0';
+	htmx_response_set_bytes(response, compressed);
 
-	htmx_response_set_content(response, compressed_content);
+	/*
+	 * And the uncompressed copy goes, because the body is the bytes now.
+	 * Leaving it would be two answers to one question -- and a
+	 * middleware unwinding after this one reads get_content() to decide
+	 * whether there is anything to encode, so a stale copy invites a
+	 * second encoding of a body that already has a Content-Encoding.
+	 */
+	htmx_response_set_content(response, NULL);
+
 	htmx_response_add_header(response, "Content-Encoding",
 	                         use_gzip ? "gzip" : "deflate");
 	htmx_response_add_header(response, "Vary", "Accept-Encoding");
 
-	g_free(compressed_content);
 	g_bytes_unref(compressed);
 }

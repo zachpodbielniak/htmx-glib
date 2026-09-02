@@ -7,6 +7,7 @@
 
 #include "htmx-session.h"
 #include "htmx-cookie.h"
+#include "htmx-secret.h"
 #include <libsoup/soup.h>
 #include <string.h>
 
@@ -112,7 +113,16 @@ htmx_session_create(HtmxSession *self)
 
 	g_return_val_if_fail(HTMX_IS_SESSION(self), NULL);
 
-	session_id = g_uuid_string_random();
+	/*
+	 * From the kernel, not from g_uuid_string_random().
+	 *
+	 * That call is a pure function of GLib's global GRand -- MT19937 --
+	 * and this value goes out in a Set-Cookie, so an attacker collects
+	 * the generator's output simply by asking for pages.  A few hundred
+	 * of them recover its state, and every session id it has issued and
+	 * will issue with it.
+	 */
+	session_id = htmx_secret_new_hex(HTMX_SECRET_DEFAULT_BYTES);
 	data = session_data_new();
 
 	g_hash_table_insert(self->sessions, g_strdup(session_id), data);
@@ -278,7 +288,22 @@ htmx_session_middleware(
 			htmx_cookie_set_http_only(cookie, self->http_only);
 
 			cookie_str = htmx_cookie_to_set_cookie(cookie);
-			htmx_response_add_header(response, "Set-Cookie", cookie_str);
+
+			/*
+			 * Appended, not added.  htmx_response_add_header()
+			 * inserts into a hash table keyed by name, so the
+			 * last writer for "Set-Cookie" wins -- and this
+			 * middleware runs after the handler on the way out,
+			 * so a handler that set a cookie of its own lost it
+			 * here, silently, with no second header to notice
+			 * missing.  Set-Cookie is the header in HTTP whose
+			 * whole design is that there is more than one of it;
+			 * htmx_response_append_header() is what says so, and
+			 * this is the only place in the library that needs
+			 * it.
+			 */
+			htmx_response_append_header(response, "Set-Cookie",
+			                            cookie_str);
 		}
 	}
 }

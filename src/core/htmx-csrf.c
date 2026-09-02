@@ -6,8 +6,8 @@
  */
 
 #include "htmx-csrf.h"
+#include "htmx-secret.h"
 #include <libsoup/soup.h>
-#include <string.h>
 
 struct _HtmxCsrf {
 	GObject parent_instance;
@@ -91,12 +91,50 @@ htmx_csrf_generate_token(HtmxCsrf *self, const gchar *session_id)
 	g_return_val_if_fail(HTMX_IS_CSRF(self), NULL);
 	g_return_val_if_fail(session_id != NULL, NULL);
 
-	token = g_uuid_string_random();
+	/*
+	 * From the kernel, not from g_uuid_string_random().
+	 *
+	 * A CSRF token is printed into the page, so the attacker who wants
+	 * to forge one is handed a fresh sample of the generator's output
+	 * every time they load it -- and g_uuid_string_random() is GLib's
+	 * global GRand, a Mersenne Twister whose state a few hundred
+	 * consecutive samples recover.
+	 */
+	token = htmx_secret_new_hex(HTMX_SECRET_DEFAULT_BYTES);
 	htmx_session_set_value(self->session, session_id,
 	                       self->session_key, token);
 
 	return htmx_session_get_value(self->session, session_id,
 	                              self->session_key);
+}
+
+/*
+ * The token this session already has, minting one only if it has none.
+ *
+ * There is one token slot per session, so calling
+ * htmx_csrf_generate_token() on every request is not "rotation" -- it is
+ * taking the token out of whatever page the reader currently has open.
+ * The middleware did exactly that on every safe request, and a page that
+ * fetches a favicon, a stylesheet or an hx-get fragment through the same
+ * stack invalidates its own form before anybody submits it.
+ *
+ * htmx_csrf_generate_token() keeps meaning "mint a new one", because
+ * that is what an application wants when the identity behind a session
+ * changes.  Which of the two the middleware needs is the whole bug, so
+ * they are two functions.
+ */
+static const gchar *
+csrf_ensure_token(HtmxCsrf *self, const gchar *session_id)
+{
+	const gchar *existing;
+
+	existing = htmx_session_get_value(self->session, session_id,
+	                                  self->session_key);
+	if (existing != NULL) {
+		return existing;
+	}
+
+	return htmx_csrf_generate_token(self, session_id);
 }
 
 gboolean
@@ -119,31 +157,52 @@ htmx_csrf_validate_token(
 		return FALSE;
 	}
 
-	/* Constant-time comparison to prevent timing attacks */
-	if (strlen(expected) != strlen(token)) {
-		return FALSE;
-	}
-
-	{
-		gsize i;
-		gsize len = strlen(expected);
-		volatile guchar result = 0;
-
-		for (i = 0; i < len; i++) {
-			result |= (guchar)expected[i] ^ (guchar)token[i];
-		}
-
-		return result == 0;
-	}
+	/*
+	 * htmx_secret_equals(), which is the same constant-time comparison
+	 * this function used to spell out for itself.  One copy, beside the
+	 * generator, so a second caller cannot reach for g_str_equal().
+	 */
+	return htmx_secret_equals(expected, token);
 }
 
 /*
- * Check if the HTTP method is "safe" (doesn't require CSRF validation).
+ * Whether this request is one of the safe methods, and so needs no token.
+ *
+ * Asked of the method string rather than of HtmxMethod, because that enum
+ * has five members -- GET, POST, PUT, PATCH, DELETE -- and parse_method()
+ * answers HTMX_METHOD_GET for every string that is not one of them.  So
+ * the old `method == HTMX_METHOD_GET` was not a test for GET: HEAD and
+ * OPTIONS passed it, which is right, and so did FROB, PROPFIND and
+ * anything else at all, which is a fail-open in the one function whose
+ * answer decides whether a credential is required.  Reading the enum
+ * cannot be fixed by listing more of its members; the value does not
+ * carry the answer.
+ *
+ * The four names are the safe methods of RFC 9110 section 9.2.1.  A
+ * request built by htmx_request_new_for_path() has no message to ask, so
+ * it falls back to the enum -- for a synthetic request the caller chose
+ * that value directly and it means what they said.
  */
 static gboolean
-is_safe_method(HtmxMethod method)
+request_is_safe(HtmxRequest *request)
 {
-	return method == HTMX_METHOD_GET;
+	SoupServerMessage *message;
+	const gchar *method;
+
+	message = htmx_request_get_message(request);
+	if (message == NULL) {
+		return htmx_request_get_method(request) == HTMX_METHOD_GET;
+	}
+
+	method = soup_server_message_get_method(message);
+	if (method == NULL) {
+		return FALSE;
+	}
+
+	return g_strcmp0(method, "GET") == 0 ||
+	       g_strcmp0(method, "HEAD") == 0 ||
+	       g_strcmp0(method, "OPTIONS") == 0 ||
+	       g_strcmp0(method, "TRACE") == 0;
 }
 
 /*
@@ -180,12 +239,10 @@ htmx_csrf_middleware(
 ){
 	HtmxCsrf *self = HTMX_CSRF(user_data);
 	HtmxRequest *request;
-	HtmxMethod method;
 	const gchar *session_id;
 	const gchar *token;
 
 	request = htmx_context_get_request(context);
-	method = htmx_request_get_method(request);
 
 	/* Get session ID from context (set by session middleware) */
 	session_id = (const gchar *)htmx_context_get_data(context,
@@ -198,9 +255,15 @@ htmx_csrf_middleware(
 		return;
 	}
 
-	if (is_safe_method(method)) {
-		/* Generate token for safe methods */
-		token = htmx_csrf_generate_token(self, session_id);
+	if (request_is_safe(request)) {
+		/*
+		 * Ensured, not generated.  Generating here replaced the token
+		 * in every page the reader already had open, so a second GET
+		 * -- a favicon, an hx-get fragment, a second tab -- turned
+		 * the next submit into a 403 that no part of the exchange
+		 * looks responsible for.
+		 */
+		token = csrf_ensure_token(self, session_id);
 		htmx_context_set_data(context, "htmx_csrf_token",
 		                      g_strdup(token), g_free);
 		next(context, next_data);
@@ -225,8 +288,13 @@ htmx_csrf_middleware(
 		}
 	}
 
-	/* Token valid — generate new token and continue */
-	token = htmx_csrf_generate_token(self, session_id);
+	/*
+	 * Token valid.  It stays as it is: rotating it here breaks a second
+	 * open form for the same reason generating one on a safe request
+	 * broke the first, and with one slot per session there is nowhere
+	 * for the old one to live while a page still holds it.
+	 */
+	token = csrf_ensure_token(self, session_id);
 	htmx_context_set_data(context, "htmx_csrf_token",
 	                      g_strdup(token), g_free);
 	next(context, next_data);
