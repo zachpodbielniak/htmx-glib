@@ -6,6 +6,8 @@
  */
 
 #include <htmx-glib.h>
+/* Temporary upload cleanup uses the GLib filesystem wrapper. */
+#include <glib/gstdio.h>
 #include <string.h>
 
 static void

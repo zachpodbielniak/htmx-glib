@@ -6,6 +6,8 @@
  */
 
 #include <htmx-glib.h>
+/* g_unlink() is declared separately from the core GLib API. */
+#include <glib/gstdio.h>
 #include <unistd.h>
 
 /*
