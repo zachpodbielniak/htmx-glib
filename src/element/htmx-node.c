@@ -499,16 +499,7 @@ htmx_node_set_html_content(
 	priv->html_content = g_strdup(html);
 }
 
-/**
- * htmx_node_append_html_content:
- * @self: an #HtmxNode
- * @html: (nullable): raw HTML content to append
- *
- * Appends raw HTML content to the node's existing HTML content.
- * If the node has no existing HTML content, this is equivalent to
- * htmx_node_set_html_content(). If @html is %NULL, this function
- * does nothing.
- */
+/* Public append-content contract is documented in htmx-node.h. */
 void
 htmx_node_append_html_content(
 	HtmxNode    *self,

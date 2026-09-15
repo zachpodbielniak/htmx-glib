@@ -98,8 +98,8 @@ typedef void (*HtmxMiddlewareNext)(HtmxContext *context,
 /**
  * HtmxMiddlewareFunc:
  * @context: the request context
- * @next: continuation to invoke the next middleware
- * @next_data: (closure next): opaque data for @next
+ * @next: (scope call): continuation to invoke with @next_data
+ * @next_data: opaque data for @next
  * @user_data: (closure): user data from registration
  *
  * A middleware function. Must call @next(@context, @next_data) to

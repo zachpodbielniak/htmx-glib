@@ -76,7 +76,7 @@ htmx_middleware_use_before(
  * htmx_middleware_run:
  * @self: an #HtmxMiddleware
  * @context: the request context
- * @handler: (nullable): terminal handler called after all middleware
+ * @handler: (scope call) (closure handler_data) (nullable): terminal handler called after all middleware
  * @handler_data: (nullable): user data for @handler
  *
  * Runs the middleware pipeline on the given context.

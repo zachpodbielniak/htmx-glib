@@ -162,7 +162,7 @@ htmx_session_remove_value(
 /**
  * htmx_session_middleware:
  * @context: the request context
- * @next: continuation function
+ * @next: (scope call) (closure next_data): continuation function
  * @next_data: continuation data
  * @user_data: (type HtmxSession): the session store
  *

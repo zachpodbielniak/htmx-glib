@@ -119,7 +119,7 @@ htmx_csrf_validate_token(
 /**
  * htmx_csrf_middleware:
  * @context: the request context
- * @next: continuation function
+ * @next: (scope call) (closure next_data): continuation function
  * @next_data: continuation data
  * @user_data: (type HtmxCsrf): the CSRF protector
  *

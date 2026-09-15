@@ -120,7 +120,7 @@ htmx_i18n_ngettext(HtmxI18n    *self,
 /**
  * htmx_i18n_middleware:
  * @context: the request context
- * @next: continuation function
+ * @next: (scope call) (closure next_data): continuation function
  * @next_data: continuation data
  * @user_data: (type HtmxI18n): the i18n instance
  *

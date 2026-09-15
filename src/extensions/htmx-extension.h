@@ -143,6 +143,16 @@ htmx_extension_encode_parameters(HtmxExtension *self,
                                  gpointer       element,
                                  GHashTable    *parameters);
 
+/**
+ * htmx_extension_get_selectors:
+ * @self: an extension
+ *
+ * Returns the additional CSS selectors owned by the extension. Implementations
+ * retain the array and its strings; callers must not modify or free them.
+ *
+ * Returns: (transfer none) (element-type utf8) (nullable): borrowed selectors,
+ *   or %NULL when the extension supplies none
+ */
 GPtrArray *
 htmx_extension_get_selectors(HtmxExtension *self);
 

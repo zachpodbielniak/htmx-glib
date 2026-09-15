@@ -34,7 +34,7 @@ htmx_router_new(void);
  * @self: an #HtmxRouter
  * @method: HTTP method
  * @pattern: URL pattern (supports :param for path parameters)
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a route with the given pattern.
@@ -52,7 +52,7 @@ htmx_router_add_route(
  * htmx_router_get:
  * @self: an #HtmxRouter
  * @pattern: URL pattern
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a GET route.
@@ -69,7 +69,7 @@ htmx_router_get(
  * htmx_router_post:
  * @self: an #HtmxRouter
  * @pattern: URL pattern
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a POST route.
@@ -86,7 +86,7 @@ htmx_router_post(
  * htmx_router_put:
  * @self: an #HtmxRouter
  * @pattern: URL pattern
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a PUT route.
@@ -103,7 +103,7 @@ htmx_router_put(
  * htmx_router_patch:
  * @self: an #HtmxRouter
  * @pattern: URL pattern
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a PATCH route.
@@ -120,7 +120,7 @@ htmx_router_patch(
  * htmx_router_delete:
  * @self: an #HtmxRouter
  * @pattern: URL pattern
- * @callback: callback function
+ * @callback: (scope forever) (closure user_data): callback function
  * @user_data: (nullable): user data for callback
  *
  * Adds a DELETE route.
