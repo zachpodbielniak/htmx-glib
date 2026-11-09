@@ -6,6 +6,14 @@
  */
 
 #include "htmx-response.h"
+#include "htmx-response-private.h"
+
+/* One registered completion hook (see htmx_response_on_complete()) */
+typedef struct {
+	HtmxResponseCompleteFunc func;
+	gpointer                 user_data;
+	GDestroyNotify           destroy;
+} CompleteHook;
 
 struct _HtmxResponse {
 	GObject parent_instance;
@@ -18,6 +26,20 @@ struct _HtmxResponse {
 	GPtrArray           *appended;      /* Headers that may repeat */
 	HtmxResponseHeaders *htmx_headers;  /* HTMX response headers */
 	gboolean             streaming;     /* Handler owns the message */
+
+	/*
+	 * A deferred response is a placeholder: the answer comes later, from
+	 * htmx_response_complete().  The server pauses the message meanwhile,
+	 * so the main loop goes on serving other requests.
+	 */
+	gboolean             deferred;
+	gboolean             completed;     /* complete() has been called */
+	gboolean             abandoned;     /* the client went away first */
+	HtmxResponse        *final;         /* what complete() was given */
+	GPtrArray           *hooks;         /* CompleteHook*, in order */
+	GCancellable        *cancellable;   /* cancelled when abandoned */
+	SoupServerMessage   *message;       /* paused, while attached */
+	gulong               disconnected_id;
 };
 
 G_DEFINE_FINAL_TYPE(HtmxResponse, htmx_response, G_TYPE_OBJECT)
@@ -36,6 +58,21 @@ htmx_response_finalize(GObject *object)
 	g_clear_pointer(&self->custom_headers, g_hash_table_unref);
 	g_clear_pointer(&self->appended, g_ptr_array_unref);
 	g_clear_pointer(&self->htmx_headers, htmx_response_headers_free);
+	g_clear_pointer(&self->hooks, g_ptr_array_unref);
+	g_clear_object(&self->final);
+	g_clear_object(&self->cancellable);
+
+	/* Attached means paused: a placeholder dropped without an answer
+	 * would leave its client waiting for ever, so answer it now. */
+	if (self->message != NULL) {
+		g_signal_handler_disconnect(self->message, self->disconnected_id);
+		if (!self->abandoned) {
+			g_warning("a deferred response was finalized without htmx_response_complete(); answering 500");
+			soup_server_message_set_status(self->message, 500, NULL);
+			soup_server_message_unpause(self->message);
+		}
+		g_clear_object(&self->message);
+	}
 
 	G_OBJECT_CLASS(htmx_response_parent_class)->finalize(object);
 }
@@ -64,6 +101,7 @@ htmx_response_init(HtmxResponse *self)
 	self->appended = g_ptr_array_new_with_free_func(g_free);
 	self->htmx_headers = htmx_response_headers_new();
 	self->streaming = FALSE;
+	self->deferred = FALSE;
 }
 
 /*
@@ -118,6 +156,272 @@ htmx_response_is_streaming(HtmxResponse *self)
 	g_return_val_if_fail(HTMX_IS_RESPONSE(self), FALSE);
 
 	return self->streaming;
+}
+
+/* ── Deferred responses ──────────────────────────────────────────── */
+
+static void
+complete_hook_free(gpointer data)
+{
+	CompleteHook *hook = data;
+
+	if (hook->destroy != NULL) {
+		hook->destroy(hook->user_data);
+	}
+	g_free(hook);
+}
+
+/*
+ * Create a placeholder for an answer that is not ready yet.
+ */
+HtmxResponse *
+htmx_response_new_deferred(void)
+{
+	HtmxResponse *self;
+
+	self = htmx_response_new();
+	self->deferred = TRUE;
+	self->hooks = g_ptr_array_new_with_free_func(complete_hook_free);
+	self->cancellable = g_cancellable_new();
+
+	return self;
+}
+
+gboolean
+htmx_response_is_deferred(HtmxResponse *self)
+{
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), FALSE);
+
+	return self->deferred;
+}
+
+gboolean
+htmx_response_is_completed(HtmxResponse *self)
+{
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), FALSE);
+
+	return self->completed;
+}
+
+GCancellable *
+htmx_response_get_cancellable(HtmxResponse *self)
+{
+	g_return_val_if_fail(HTMX_IS_RESPONSE(self), NULL);
+	g_return_val_if_fail(self->deferred, NULL);
+
+	return self->cancellable;
+}
+
+void
+htmx_response_on_complete(
+	HtmxResponse             *self,
+	HtmxResponseCompleteFunc  func,
+	gpointer                  user_data,
+	GDestroyNotify            destroy
+){
+	CompleteHook *hook;
+
+	g_return_if_fail(HTMX_IS_RESPONSE(self));
+	g_return_if_fail(self->deferred);
+	g_return_if_fail(func != NULL);
+
+	/*
+	 * Completed inside its own handler, before middleware saw it: the
+	 * answer is not written until the server attaches the message, so
+	 * the hook can still run on it now, in the order it would have.
+	 */
+	if (self->completed) {
+		if (self->message != NULL || self->final == NULL) {
+			g_critical("htmx_response_on_complete() on a response already written");
+			if (destroy != NULL)
+				destroy(user_data);
+			return;
+		}
+		func(self, self->final, user_data);
+		if (destroy != NULL)
+			destroy(user_data);
+		return;
+	}
+
+	hook = g_new0(CompleteHook, 1);
+	hook->func = func;
+	hook->user_data = user_data;
+	hook->destroy = destroy;
+	g_ptr_array_add(self->hooks, hook);
+}
+
+/*
+ * Write the final answer onto the paused message and let it go.
+ */
+static void
+deliver(HtmxResponse *self)
+{
+	SoupServerMessage *message;
+
+	if (self->message == NULL) {
+		return;
+	}
+
+	message = g_steal_pointer(&self->message);
+	g_signal_handler_disconnect(message, self->disconnected_id);
+	self->disconnected_id = 0;
+
+	if (!self->abandoned) {
+		htmx_response_apply(self->final, message);
+		soup_server_message_unpause(message);
+	}
+
+	g_object_unref(message);
+}
+
+void
+htmx_response_complete(
+	HtmxResponse *self,
+	HtmxResponse *response
+){
+	guint i;
+
+	g_return_if_fail(HTMX_IS_RESPONSE(self));
+	g_return_if_fail(self->deferred);
+	g_return_if_fail(HTMX_IS_RESPONSE(response));
+	g_return_if_fail(!htmx_response_is_deferred(response));
+
+	if (self->completed) {
+		g_critical("htmx_response_complete() called twice on one deferred response");
+		return;
+	}
+
+	self->completed = TRUE;
+	self->final = g_object_ref(response);
+
+	/*
+	 * Hooks run in the order they were registered.  Middleware registers
+	 * its hook after next() returns, so the innermost registers first:
+	 * the same order its code after next() would have run in.
+	 */
+	for (i = 0; i < self->hooks->len; i++) {
+		CompleteHook *hook = g_ptr_array_index(self->hooks, i);
+
+		hook->func(self, self->final, hook->user_data);
+	}
+	g_ptr_array_set_size(self->hooks, 0);
+
+	deliver(self);
+}
+
+static void
+on_disconnected(SoupServerMessage *message, gpointer user_data)
+{
+	HtmxResponse *self = user_data;
+
+	(void)message;
+	self->abandoned = TRUE;
+	g_cancellable_cancel(self->cancellable);
+}
+
+void
+htmx_response_attach_message(
+	HtmxResponse      *self,
+	SoupServerMessage *message
+){
+	g_return_if_fail(HTMX_IS_RESPONSE(self));
+	g_return_if_fail(self->deferred);
+	g_return_if_fail(self->message == NULL);
+
+	/* Answered already, inside the handler: nothing to wait for. */
+	if (self->completed) {
+		htmx_response_apply(self->final, message);
+		return;
+	}
+
+	self->message = g_object_ref(message);
+	self->disconnected_id = g_signal_connect(message, "disconnected",
+	                                         G_CALLBACK(on_disconnected), self);
+	soup_server_message_pause(message);
+}
+
+/* ── Answers computed on a worker thread ─────────────────────────── */
+
+typedef struct {
+	HtmxResponseThreadFunc func;
+	gpointer               user_data;
+	GDestroyNotify         destroy;
+} ThreadJob;
+
+static void
+thread_job_free(gpointer data)
+{
+	ThreadJob *job = data;
+
+	if (job->destroy != NULL) {
+		job->destroy(job->user_data);
+	}
+	g_free(job);
+}
+
+static void
+thread_job_run(
+	GTask        *task,
+	gpointer      source_object,
+	gpointer      task_data,
+	GCancellable *cancellable
+){
+	ThreadJob *job = task_data;
+	HtmxResponse *response;
+
+	(void)source_object;
+	response = job->func(cancellable, job->user_data);
+	g_task_return_pointer(task, response, g_object_unref);
+}
+
+static void
+thread_job_done(
+	GObject      *source_object,
+	GAsyncResult *result,
+	gpointer      user_data
+){
+	HtmxResponse *self = HTMX_RESPONSE(source_object);
+	g_autoptr(HtmxResponse) response = NULL;
+
+	(void)user_data;
+	response = g_task_propagate_pointer(G_TASK(result), NULL);
+	if (response == NULL) {
+		response = htmx_response_error("The request produced no response");
+	}
+	htmx_response_complete(self, response);
+}
+
+HtmxResponse *
+htmx_response_new_threaded(
+	HtmxResponseThreadFunc func,
+	gpointer               user_data,
+	GDestroyNotify         destroy
+){
+	HtmxResponse *self;
+	ThreadJob *job;
+	g_autoptr(GTask) task = NULL;
+
+	g_return_val_if_fail(func != NULL, NULL);
+
+	self = htmx_response_new_deferred();
+	job = g_new0(ThreadJob, 1);
+	job->func = func;
+	job->user_data = user_data;
+	job->destroy = destroy;
+
+	/*
+	 * The task holds the placeholder as its source object, so it lives
+	 * until the answer is written however early the caller drops it; and
+	 * the callback comes back on the calling thread's main context, which
+	 * is where the message must be unpaused.
+	 */
+	task = g_task_new(self, self->cancellable, thread_job_done, NULL);
+	g_task_set_source_tag(task, htmx_response_new_threaded);
+	g_task_set_task_data(task, job, thread_job_free);
+	g_task_set_return_on_cancel(task, FALSE);
+	g_task_run_in_thread(task, thread_job_run);
+
+	return self;
 }
 
 /*
@@ -481,6 +785,11 @@ htmx_response_apply(
 	 * or the body here would undo what it has already set.
 	 */
 	if (self->streaming) {
+		return;
+	}
+
+	/* A placeholder carries no answer; attach_message() waits for one. */
+	if (self->deferred) {
 		return;
 	}
 

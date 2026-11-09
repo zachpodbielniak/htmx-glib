@@ -10,7 +10,8 @@ TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-sync test-handler test-upload test-compression \
         test-validation-group test-validator test-metrics test-streaming \
         test-response-bytes test-serve-static test-template-engine \
-        test-secret test-csrf test-session test-request test-method
+        test-secret test-csrf test-session test-request test-method \
+        test-deferred
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -21,6 +22,10 @@ TEST_LDFLAGS = -L../$(OUTDIR) -lhtmx-glib-$(API_VERSION) $(LDFLAGS) -Wl,-rpath,$
 all: $(TESTS)
 
 test-validator: test-validator.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-deferred: test-deferred.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 

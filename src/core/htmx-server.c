@@ -6,6 +6,10 @@
  */
 
 #include "htmx-server.h"
+#include "htmx-response-private.h"
+
+#include <errno.h>
+#include <sys/socket.h>
 
 struct _HtmxServer {
 	GObject parent_instance;
@@ -83,6 +87,9 @@ handle_request(
 	if (response == NULL) {
 		g_autoptr(HtmxResponse) not_found = htmx_response_not_found();
 		htmx_response_apply(not_found, msg);
+	} else if (htmx_response_is_deferred(response)) {
+		/* Paused until the answer arrives; the loop serves others. */
+		htmx_response_attach_message(response, msg);
 	} else {
 		htmx_response_apply(response, msg);
 	}
@@ -198,10 +205,43 @@ htmx_server_use(
 }
 
 /*
+ * Give every listening socket the configured backlog.
+ *
+ * libsoup binds with GSocket's default of 10 and offers no way to ask for
+ * more, and GSocket refuses g_socket_set_listen_backlog() once a socket
+ * listens.  So the descriptor is told to listen again: on Linux and the
+ * BSDs a second listen() on a listening socket changes only its backlog,
+ * and every other choice libsoup made about binding stands.
+ */
+void
+htmx_server_apply_listen_backlog(HtmxServer *self)
+{
+	GSList *listeners;
+	GSList *iter;
+	gint backlog;
+
+	g_return_if_fail(HTMX_IS_SERVER(self));
+
+	backlog = htmx_config_get_listen_backlog(self->config);
+	listeners = soup_server_get_listeners(self->soup_server);
+	for (iter = listeners; iter != NULL; iter = iter->next) {
+		GSocket *socket = G_SOCKET(iter->data);
+
+		if (listen(g_socket_get_fd(socket), backlog) != 0) {
+			gint saved = errno;
+
+			g_message("htmx-server: could not raise the listen backlog to %d: %s",
+			          backlog, g_strerror(saved));
+		}
+	}
+	g_slist_free(listeners);
+}
+
+/*
  * Bind one address, in whichever of soup's three forms fits it.
  */
 static gboolean
-listen_one(
+bind_one(
 	HtmxServer  *self,
 	const gchar *host,
 	guint16      port,
@@ -241,6 +281,20 @@ listen_one(
 
 		return ok;
 	}
+}
+
+static gboolean
+listen_one(
+	HtmxServer  *self,
+	const gchar *host,
+	guint16      port,
+	GError     **error
+){
+	if (!bind_one(self, host, port, error)) {
+		return FALSE;
+	}
+	htmx_server_apply_listen_backlog(self);
+	return TRUE;
 }
 
 gboolean

@@ -185,6 +185,65 @@ that signal is the only thing that will ever tell you.  It fires exactly
 once, whichever of the three routes gets there first: the peer hanging
 up, soup finishing the message, or your own `htmx_sse_connection_close()`.
 
+## Answers that come later: deferred and threaded responses
+
+A route handler's return value is the answer, so a handler that has to
+wait -- on another service, on a slow query -- used to hold the whole
+server while it waited.  Two kinds of placeholder fix that:
+
+- `htmx_response_new_deferred()`: return it and keep a reference; the
+  server pauses the message and the main loop goes on serving others.
+  Later, on the loop's thread, `htmx_response_complete(deferred, answer)`
+  writes the answer and resumes the message.
+- `htmx_response_new_threaded(func, data, destroy)`: `func` runs on a GIO
+  worker thread and returns the answer, which is completed back on the
+  calling thread's main context.  The caller may drop its reference at
+  once.  `func` must not touch anything that belongs to the main thread.
+
+```c
+static HtmxResponse *
+compute(GCancellable *cancellable, gpointer user_data)
+{
+	return htmx_response_new_with_content(expensive_but_thread_safe(user_data));
+}
+
+static HtmxResponse *
+handle_report(HtmxRequest *request, GHashTable *params, gpointer user_data)
+{
+	return htmx_response_new_threaded(compute, g_strdup(params_id(params)), g_free);
+}
+```
+
+Traps, each pinned by `tests/test-deferred.c`:
+
+- **Middleware sees the placeholder.** Code after `next()` that reads or
+  changes the response must check `htmx_response_is_deferred()` and do
+  its work in `htmx_response_on_complete()`.  Hooks run in registration
+  order, which for middleware is innermost first -- the order its
+  post-`next()` code would have run in.  A hook registered on a
+  placeholder already completed inside its handler runs at once.
+- **A placeholder finalized without an answer answers 500 and warns.**
+  Keep a reference until you complete it.
+- **A vanished client is not noticed early.**  libsoup stops watching a
+  paused connection, so `htmx_response_get_cancellable()` may only be
+  cancelled when the answer is written.  It is a hint that work can
+  stop, never a promise.  Completing an abandoned placeholder is safe.
+- **Complete on the loop's thread.**  The message belongs to it.  The
+  threaded form does this for you.
+
+## The listen backlog
+
+libsoup binds with GSocket's default backlog of 10.  A burst of clients
+connecting at once overflows that: the kernel drops the SYNs and each
+waits a second or more to retry, which looks exactly like a slow server.
+`HtmxConfig`'s `listen-backlog` (default
+`HTMX_CONFIG_DEFAULT_LISTEN_BACKLOG`, 1024; the kernel clamps it to
+`net.core.somaxconn`) is applied to every socket the server binds by
+calling `listen()` again on the descriptor (`htmx_server_apply_listen_backlog()`, public for a socket bound through the `SoupServer` directly) -- GSocket refuses
+`g_socket_set_listen_backlog()` once a socket listens, and libsoup offers
+no way to ask.  `/deferred/listen-backlog` opens 64 connections without
+the loop running; with the old backlog the eleventh times out.
+
 ## Listening on more than one address
 
 `htmx_server_start()` binds exactly one address, which cannot express

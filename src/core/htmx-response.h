@@ -73,6 +73,141 @@ gboolean
 htmx_response_is_streaming(HtmxResponse *self);
 
 /**
+ * HtmxResponseCompleteFunc:
+ * @deferred: the placeholder being completed
+ * @response: the final response, which the hook may still change
+ * @user_data: (closure): data given to htmx_response_on_complete()
+ *
+ * Called when a deferred response is completed, before the answer is
+ * written.  This is where middleware does what it would otherwise have
+ * done after next() returned -- set a header, record the status.
+ */
+typedef void (*HtmxResponseCompleteFunc)(HtmxResponse *deferred,
+                                         HtmxResponse *response,
+                                         gpointer      user_data);
+
+/**
+ * HtmxResponseThreadFunc:
+ * @cancellable: cancelled when the client is known to have gone (see
+ *   htmx_response_get_cancellable())
+ * @user_data: (closure): data given to htmx_response_new_threaded()
+ *
+ * Computes a response on a worker thread.  It must not touch anything
+ * that belongs to the main thread.
+ *
+ * Returns: (transfer full) (nullable): the response; %NULL answers 500
+ */
+typedef HtmxResponse *(*HtmxResponseThreadFunc)(GCancellable *cancellable,
+                                                gpointer      user_data);
+
+/**
+ * htmx_response_new_deferred:
+ *
+ * Creates a placeholder for an answer that is not ready yet.
+ *
+ * A route handler returns it and keeps a reference.  The server pauses
+ * the message instead of answering, so the main loop goes on serving
+ * other requests, and writes whatever is later passed to
+ * htmx_response_complete().  Complete it on the thread that runs the
+ * server's main loop.  A placeholder finalized without being completed
+ * answers 500 and warns.
+ *
+ * Middleware that looks at the response after next() sees the
+ * placeholder; it should check htmx_response_is_deferred() and register
+ * its post-processing with htmx_response_on_complete().
+ *
+ * Returns: (transfer full): a new deferred #HtmxResponse
+ */
+HtmxResponse *
+htmx_response_new_deferred(void);
+
+/**
+ * htmx_response_new_threaded:
+ * @func: (scope notified) (closure user_data) (destroy destroy): computes the answer on a worker thread
+ * @user_data: data for @func
+ * @destroy: (nullable): frees @user_data, on the calling thread's main context
+ *
+ * Creates a deferred response whose answer is computed by @func on a
+ * GIO worker thread and written back on the calling thread's main
+ * context.  The placeholder keeps itself alive until then; the caller
+ * may drop its reference at once.
+ *
+ * Returns: (transfer full): a new deferred #HtmxResponse
+ */
+HtmxResponse *
+htmx_response_new_threaded(
+	HtmxResponseThreadFunc func,
+	gpointer               user_data,
+	GDestroyNotify         destroy
+);
+
+/**
+ * htmx_response_is_deferred:
+ * @self: an #HtmxResponse
+ *
+ * Returns: %TRUE if @self is a placeholder for a later answer
+ */
+gboolean
+htmx_response_is_deferred(HtmxResponse *self);
+
+/**
+ * htmx_response_is_completed:
+ * @self: an #HtmxResponse
+ *
+ * Returns: %TRUE once htmx_response_complete() has been called on @self
+ */
+gboolean
+htmx_response_is_completed(HtmxResponse *self);
+
+/**
+ * htmx_response_get_cancellable:
+ * @self: a deferred #HtmxResponse
+ *
+ * The cancellable is cancelled when libsoup reports the client gone.
+ * libsoup does not watch a paused connection, so that may be only when
+ * the answer is written: treat it as a hint that work can stop, never
+ * as a promise that a vanished client is noticed at once.
+ *
+ * Returns: (transfer none): a cancellable cancelled when the client is
+ *   known to have disconnected
+ */
+GCancellable *
+htmx_response_get_cancellable(HtmxResponse *self);
+
+/**
+ * htmx_response_on_complete:
+ * @self: a deferred #HtmxResponse, not yet completed
+ * @func: (scope notified) (closure user_data) (destroy destroy): the hook
+ * @user_data: data for @func
+ * @destroy: (nullable): frees @user_data
+ *
+ * Registers a hook run, in registration order, when @self is completed.
+ */
+void
+htmx_response_on_complete(
+	HtmxResponse             *self,
+	HtmxResponseCompleteFunc  func,
+	gpointer                  user_data,
+	GDestroyNotify            destroy
+);
+
+/**
+ * htmx_response_complete:
+ * @self: a deferred #HtmxResponse
+ * @response: (transfer none): the final, non-deferred response
+ *
+ * Gives a placeholder its answer: runs the completion hooks, writes
+ * @response onto the paused message and resumes it.  If the client has
+ * already gone, nothing is written.  Call it once, on the thread that
+ * runs the server's main loop.
+ */
+void
+htmx_response_complete(
+	HtmxResponse *self,
+	HtmxResponse *response
+);
+
+/**
  * htmx_response_set_content:
  * @self: an #HtmxResponse
  * @content: HTML content

@@ -13,6 +13,7 @@ struct _HtmxConfig {
 	guint16  port;
 	gchar   *host;
 	gchar   *static_dir;
+	gint     listen_backlog;
 };
 
 G_DEFINE_FINAL_TYPE(HtmxConfig, htmx_config, G_TYPE_OBJECT)
@@ -42,6 +43,7 @@ htmx_config_init(HtmxConfig *self)
 	self->port = 8080;
 	self->host = g_strdup("127.0.0.1");
 	self->static_dir = NULL;
+	self->listen_backlog = HTMX_CONFIG_DEFAULT_LISTEN_BACKLOG;
 }
 
 HtmxConfig *
@@ -104,4 +106,23 @@ htmx_config_get_static_dir(HtmxConfig *self)
 	g_return_val_if_fail(HTMX_IS_CONFIG(self), NULL);
 
 	return self->static_dir;
+}
+
+void
+htmx_config_set_listen_backlog(
+	HtmxConfig *self,
+	gint        backlog
+){
+	g_return_if_fail(HTMX_IS_CONFIG(self));
+	g_return_if_fail(backlog > 0);
+
+	self->listen_backlog = backlog;
+}
+
+gint
+htmx_config_get_listen_backlog(HtmxConfig *self)
+{
+	g_return_val_if_fail(HTMX_IS_CONFIG(self), HTMX_CONFIG_DEFAULT_LISTEN_BACKLOG);
+
+	return self->listen_backlog;
 }

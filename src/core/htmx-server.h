@@ -194,6 +194,20 @@ htmx_server_run(HtmxServer *self);
 gboolean
 htmx_server_is_running(HtmxServer *self);
 
+/**
+ * htmx_server_apply_listen_backlog:
+ * @self: an #HtmxServer
+ *
+ * Gives every socket the server listens on the configured listen
+ * backlog (see htmx_config_set_listen_backlog()).  The server does this
+ * itself after htmx_server_start() and htmx_server_listen_on(); call it
+ * after binding through the #SoupServer directly -- soup_server_listen()
+ * with %SOUP_SERVER_LISTEN_HTTPS, say -- or that socket keeps GSocket's
+ * backlog of 10.
+ */
+void
+htmx_server_apply_listen_backlog(HtmxServer *self);
+
 G_END_DECLS
 
 #endif /* HTMX_SERVER_H */

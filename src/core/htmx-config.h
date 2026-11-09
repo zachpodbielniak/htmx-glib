@@ -97,6 +97,38 @@ htmx_config_set_static_dir(
 const gchar *
 htmx_config_get_static_dir(HtmxConfig *self);
 
+/**
+ * HTMX_CONFIG_DEFAULT_LISTEN_BACKLOG:
+ *
+ * The listen backlog a server asks for unless told otherwise.  GSocket's
+ * own default is 10, which a burst of clients connecting at once
+ * overflows: the kernel drops their SYNs and they wait a second or more
+ * to retry.  The kernel clamps the value to net.core.somaxconn.
+ */
+#define HTMX_CONFIG_DEFAULT_LISTEN_BACKLOG (1024)
+
+/**
+ * htmx_config_set_listen_backlog:
+ * @self: an #HtmxConfig
+ * @backlog: connections the kernel may queue before they are accepted
+ *
+ * Sets the listen backlog of every socket the server binds.
+ */
+void
+htmx_config_set_listen_backlog(
+	HtmxConfig *self,
+	gint        backlog
+);
+
+/**
+ * htmx_config_get_listen_backlog:
+ * @self: an #HtmxConfig
+ *
+ * Returns: the listen backlog
+ */
+gint
+htmx_config_get_listen_backlog(HtmxConfig *self);
+
 G_END_DECLS
 
 #endif /* HTMX_CONFIG_H */
