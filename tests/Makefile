@@ -11,7 +11,7 @@ TESTS = test-enums test-attribute test-trigger test-swap test-headers \
         test-validation-group test-validator test-metrics test-streaming \
         test-response-bytes test-serve-static test-template-engine \
         test-secret test-csrf test-session test-request test-method \
-        test-deferred
+        test-deferred test-wipe
 
 # Compiler flags - use the build output directory for library and generated headers
 TEST_CFLAGS = $(CFLAGS) -I.. -I../$(SRCDIR) -I../$(OUTDIR)
@@ -42,6 +42,10 @@ test-serve-static: test-serve-static.c
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 
 test-template-engine: test-template-engine.c
+	$(ECHO) "  CC      $@"
+	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
+
+test-wipe: test-wipe.c
 	$(ECHO) "  CC      $@"
 	$(Q)$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_LDFLAGS)
 

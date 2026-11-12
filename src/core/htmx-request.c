@@ -7,6 +7,7 @@
 
 #include "htmx-request.h"
 #include "htmx-error.h"
+#include "htmx-secret.h"
 #include <json-glib/json-glib.h>
 #include <string.h>
 
@@ -19,8 +20,8 @@ struct _HtmxRequest {
 	gchar              *query;         /* Query string */
 	GHashTable         *query_params;  /* Parsed query parameters */
 	HtmxRequestHeaders *htmx_headers;  /* Parsed HTMX headers */
-	gchar              *body;          /* Request body as string */
-	GBytes             *body_bytes;    /* Request body as bytes */
+	const gchar        *body;          /* body_bytes read as a C string */
+	GBytes             *body_bytes;    /* Request body, wiped when freed */
 	GHashTable         *form_data;     /* Parsed form data */
 	gchar              *content_type;  /* Content-Type header */
 };
@@ -48,7 +49,13 @@ parse_query_string(const gchar *query)
 	gchar *p;
 	gint i;
 
-	params = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	/*
+	 * Freed through htmx_secret_free(): a POST body comes through here,
+	 * and a login form's password is one of its values.  The query string
+	 * shares the reader, and a token in a URL is no less a secret.
+	 */
+	params = g_hash_table_new_full(g_str_hash, g_str_equal,
+	                               htmx_secret_free, htmx_secret_free);
 
 	if (query == NULL || query[0] == '\0') {
 		return params;
@@ -88,9 +95,15 @@ parse_query_string(const gchar *query)
 		if (key != NULL) {
 			g_hash_table_insert(params, key, value != NULL ? value : g_strdup(""));
 		} else {
-			g_free(value);
+			htmx_secret_free(value);
 		}
+
+		/* The still-escaped pair is the same secret in another spelling. */
+		htmx_secret_wipe(pairs[i], strlen(pairs[i]));
 	}
+
+	/* So is the '+'-substituted whole; the split copied it, not moved it. */
+	htmx_secret_wipe(decoded, strlen(decoded));
 
 	return params;
 }
@@ -156,7 +169,8 @@ htmx_request_finalize(GObject *object)
 	g_clear_pointer(&self->query, g_free);
 	g_clear_pointer(&self->query_params, g_hash_table_unref);
 	g_clear_pointer(&self->htmx_headers, htmx_request_headers_free);
-	g_clear_pointer(&self->body, g_free);
+	/* body points into body_bytes, whose storage wipes itself. */
+	self->body = NULL;
 	g_clear_pointer(&self->body_bytes, g_bytes_unref);
 	g_clear_pointer(&self->form_data, g_hash_table_unref);
 	g_clear_pointer(&self->content_type, g_free);
@@ -276,8 +290,22 @@ htmx_request_new_from_message(SoupServerMessage *message)
 	/* Get body */
 	body = soup_server_message_get_request_body(message);
 	if (body != NULL && body->length > 0) {
-		self->body_bytes = g_bytes_new(body->data, body->length);
-		self->body = g_strndup(body->data, body->length);
+		/*
+		 * One copy, not two, and one that wipes itself.  This used to be
+		 * g_bytes_new() plus g_strndup() -- two plaintext copies of every
+		 * body, a login form's password included, both handed back to
+		 * the allocator uncleared.  htmx_secret_bytes_new() NUL-terminates
+		 * its storage, so the string view is the same memory and reads
+		 * exactly as g_strndup()'s did: up to the first NUL.  A caller
+		 * holding a reference to the bytes keeps them alive, and the wipe
+		 * happens when the last reference goes.
+		 *
+		 * libsoup's own copy of the body (its chunks, and the flattened
+		 * buffer) is wiped by the server when the request finishes;
+		 * see htmx_secret_wipe_message_body().
+		 */
+		self->body_bytes = htmx_secret_bytes_new(body->data, (gsize)body->length);
+		self->body = (const gchar *)g_bytes_get_data(self->body_bytes, NULL);
 
 		/* Parse form data if applicable */
 		if (self->content_type != NULL &&
@@ -291,10 +319,10 @@ htmx_request_new_from_message(SoupServerMessage *message)
 			 */
 			self->form_data = parse_query_string(self->body);
 		} else {
-			self->form_data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+			self->form_data = parse_query_string(NULL);
 		}
 	} else {
-		self->form_data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+		self->form_data = parse_query_string(NULL);
 	}
 
 	return self;

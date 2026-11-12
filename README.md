@@ -11,6 +11,7 @@ A GObject-based C library for building [HTMX](https://htmx.org)-powered web appl
 - **Extensions** — SSE and WebSocket support via `HtmxSse`, `HtmxWebSocket`
 - **Middleware stack** — Pluggable `HtmxMiddleware` for auth, CSRF, rate limiting, i18n, sessions
 - **Secrets from the kernel** — `htmx_secret_new_hex()` / `htmx_secret_equals()` for session ids, CSRF tokens and anything else that must not be predictable
+- **Request bodies are wiped** — every copy of a body the library makes (the body string and bytes, decoded form values, multipart fields and uploads) is cleared before it is freed, and `HtmxServer` clears libsoup's own copy when each request finishes, so a posted password does not linger in the heap. The helpers (`htmx_secret_wipe()`, `htmx_secret_free()`, `htmx_secret_bytes_new()`, `htmx_secret_wipe_message_body()`) are public for code that copies a value out. Out of reach: libsoup's socket read buffers, the TLS library, the kernel, and copies a caller makes (a `JsonParser` built from the body copies every string)
 - **GObject Introspection** — Full `.gir` / `.typelib` for use from Python, Lua, JavaScript, etc.
 - **gnu89 C** — No C99+, no C++ — clean, portable, embeddable
 

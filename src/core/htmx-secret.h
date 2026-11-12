@@ -23,6 +23,7 @@
 #define HTMX_SECRET_H
 
 #include <glib.h>
+#include <libsoup/soup.h>
 
 G_BEGIN_DECLS
 
@@ -80,6 +81,88 @@ htmx_secret_equals(
 	const gchar *a,
 	const gchar *b
 );
+
+/*
+ * Wiping.
+ *
+ * A request body is where a password arrives: a login form, a password
+ * change, an API call creating an account.  Every copy of it this library
+ * made -- the body string, the body bytes, the decoded form values, the
+ * multipart fields -- used to go back to the allocator with g_free(), which
+ * leaves the bytes where they were until the allocator happens to hand the
+ * block to somebody else.  A core dump, a heap read past some other bug, or
+ * a swapped-out page then has the plaintext in it.
+ *
+ * A plain memset() before the free does not fix that: the compiler may see
+ * that nothing reads the buffer again and delete the store.  The functions
+ * below are the one place the store is made unremovable, and everything in
+ * this library that held request input frees through them.
+ *
+ * What they cannot reach is said once, here: libsoup's socket read buffers
+ * and its header parser, the TLS library's records, the kernel's socket
+ * buffers, and anything a caller copied out of a value (a JsonParser built
+ * on the body copies every string it reads, for instance).
+ */
+
+/**
+ * htmx_secret_wipe:
+ * @data: (nullable) (array length=length) (element-type guint8): memory to clear
+ * @length: how many bytes to clear
+ *
+ * Overwrites @length bytes at @data with zeros in a way the compiler may
+ * not remove as a dead store.  A %NULL @data or a zero @length does
+ * nothing.
+ */
+void
+htmx_secret_wipe(
+	gpointer data,
+	gsize    length
+);
+
+/**
+ * htmx_secret_free:
+ * @str: (nullable) (transfer full): a string that may hold a secret
+ *
+ * Wipes @str up to its terminating NUL and frees it with g_free().  It is
+ * a #GDestroyNotify for hash tables whose keys or values came from a
+ * request, and it is safe on %NULL.
+ */
+void
+htmx_secret_free(gpointer str);
+
+/**
+ * htmx_secret_bytes_new:
+ * @data: (nullable) (array length=size) (element-type guint8): bytes to copy
+ * @size: how many bytes
+ *
+ * Copies @data into a new #GBytes whose storage is wiped when its last
+ * reference is dropped.  One byte past @size is always a NUL that is not
+ * part of the #GBytes, so the data may be read as a C string up to its
+ * first NUL without a second copy.
+ *
+ * Returns: (transfer full): the new #GBytes
+ */
+GBytes *
+htmx_secret_bytes_new(
+	gconstpointer data,
+	gsize         size
+);
+
+/**
+ * htmx_secret_wipe_message_body:
+ * @body: (nullable): a #SoupMessageBody to clear
+ *
+ * Wipes every chunk @body holds, and the flattened copy libsoup makes of
+ * them, then truncates it.  soup_message_body_truncate() alone releases
+ * the chunks without clearing them.
+ *
+ * Use it only on a request body, and only once nothing will read it
+ * again.  It writes into the chunks' storage, which for a body libsoup
+ * read off a socket is ordinary heap; a body built from static or mapped
+ * memory must not be passed here.
+ */
+void
+htmx_secret_wipe_message_body(SoupMessageBody *body);
 
 G_END_DECLS
 

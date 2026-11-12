@@ -6,6 +6,7 @@
  */
 
 #include "htmx-uploaded-file.h"
+#include "htmx-secret.h"
 #include "htmx-error.h"
 #include <string.h>
 
@@ -292,7 +293,12 @@ htmx_uploaded_file_parse_multipart(const gchar  *content_type,
 	body_str = g_bytes_get_data(body, &body_len);
 
 	files = g_ptr_array_new_with_free_func((GDestroyNotify)htmx_uploaded_file_free);
-	fields = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	/*
+	 * A multipart form's text fields are a password's other way in, so
+	 * they are wiped on the way out like the urlencoded ones.
+	 */
+	fields = g_hash_table_new_full(g_str_hash, g_str_equal,
+	                               htmx_secret_free, htmx_secret_free);
 
 	/* Find first delimiter */
 	pos = find_bytes(body_str, body_len, delimiter, delim_len);
@@ -371,7 +377,9 @@ htmx_uploaded_file_parse_multipart(const gchar  *content_type,
 			if (name != NULL) {
 				if (filename != NULL) {
 					/* File upload */
-					GBytes *file_data = g_bytes_new(data_start, (gsize)(data_end - data_start));
+					/* A copy of request input, so it clears itself too:
+					 * an upload is as likely to be a key file as a photo. */
+					GBytes *file_data = htmx_secret_bytes_new(data_start, (gsize)(data_end - data_start));
 					HtmxUploadedFile *file;
 
 					file = htmx_uploaded_file_new(

@@ -6,6 +6,7 @@
  */
 
 #include "htmx-server.h"
+#include "htmx-secret.h"
 #include "htmx-response-private.h"
 
 #include <errno.h>
@@ -95,6 +96,31 @@ handle_request(
 	}
 }
 
+/*
+ * libsoup's copy of a request body -- the chunks read off the socket, and
+ * the flattened buffer made from them -- is freed with the message, and
+ * freeing does not clear it.  HtmxRequest's own copy wipes itself; this is
+ * the other half.  "request-finished" is after the response is written,
+ * when nothing reads the request again; libsoup emits "request-aborted"
+ * instead for a dropped connection or a handler's 500, which is connected
+ * to the same function so a failed login is no exception.
+ *
+ * Connected in htmx_server_new(), before anything an application adds to
+ * the soup server, so it runs ahead of a handler that truncates the body:
+ * truncating first would release the chunks before they were cleared.
+ */
+static void
+wipe_request_body(
+	SoupServer        *server,
+	SoupServerMessage *msg,
+	gpointer           user_data
+){
+	(void)server;
+	(void)user_data;
+
+	htmx_secret_wipe_message_body(soup_server_message_get_request_body(msg));
+}
+
 static void
 htmx_server_finalize(GObject *object)
 {
@@ -138,6 +164,10 @@ htmx_server_new(void)
 	self->soup_server = soup_server_new(NULL, NULL);
 
 	soup_server_add_handler(self->soup_server, NULL, handle_request, self, NULL);
+	g_signal_connect(self->soup_server, "request-finished",
+	                 G_CALLBACK(wipe_request_body), NULL);
+	g_signal_connect(self->soup_server, "request-aborted",
+	                 G_CALLBACK(wipe_request_body), NULL);
 
 	return self;
 }
